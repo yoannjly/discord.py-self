@@ -8,6 +8,8 @@ nav_order: 1
 This site will serve as a home for the project.
 {: .fs-6 .fw-300 }
 
+---
+
 Here you'll find the documentation, code-snippets, blogs, notes, and everything in between!
 Check out the [about](/about.html) page to learn more about the project, or read the [docs](/docs/)!
 
