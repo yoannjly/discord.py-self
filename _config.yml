@@ -1,4 +1,4 @@
 title: Discord.py-self
 description: A fork of the popular Discord.py for self-bots. 
-theme: just-the-docs
+remote_theme: pmarsceill/just-the-docs
 baseurl: /discord.py-self
