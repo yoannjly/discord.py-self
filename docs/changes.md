@@ -7,7 +7,7 @@ nav_order: 1
 
 # Fork changes
 This fork of `discord.py` aims to be as feature-complete to the original as possible. However, this isn't always feasible. 
-Below are the changes.
+Below are the things added, removed, and changed.
 
 **Note:** Internal changes that don't affect functionality are not listed. 
 
