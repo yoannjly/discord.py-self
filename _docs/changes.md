@@ -1,3 +1,8 @@
+---
+layout: default
+title: Changes
+---
+
 # Fork changes
 This fork of `discord.py` aims to be as feature-complete to the original as possible. However, this isn't always feasible. 
 Below are the changes.
