@@ -1,6 +1,7 @@
 title: Discord.py Self
 description: A fork of the popular Discord.py for self-bots. 
 remote_theme: pmarsceill/just-the-docs
+url: "https://dolf.ml"
 baseurl: /discord.py-self
 
 last_edit_timestamp: false
