@@ -1,3 +1,4 @@
 theme: jekyll-theme-cayman
 title: Discord.py-self
 description: A fork of the popular Discord.py for self-bots. 
+baseurl: /discord.py-self
