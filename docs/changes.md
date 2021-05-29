@@ -1,6 +1,8 @@
 ---
 layout: default
 title: Changes
+parent: Documentation
+nav_order: 1
 ---
 
 # Fork changes
