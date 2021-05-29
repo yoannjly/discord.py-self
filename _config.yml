@@ -12,5 +12,9 @@ gh_edit_link: false
 last_edit_timestamp: false
 
 aux_links:
-  "GitHub":
+  "Source":
     - "//github.com/dolfies/discord.py-self"
+  "Releases":
+    - "//github.com/dolfies/discord.py-self/releases"
+  "PyPi":
+    - "//pypi.org/project/discord.py-self"
