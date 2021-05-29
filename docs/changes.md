@@ -1,5 +1,3 @@
-{% include navigation.html %}
-
 # Fork changes
 This fork of `discord.py` aims to be as close to the original as possible. However, this isn't always feasible. 
 Below are the changes.
