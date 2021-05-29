@@ -1,6 +1,7 @@
 ---
 layout: home
 title: Home
+nav_order: 1
 ---
 
 # Welcome to Discord.py Self!
