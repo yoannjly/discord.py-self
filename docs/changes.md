@@ -1,5 +1,5 @@
 # Fork changes
-This fork of `discord.py` aims to be as close to the original as possible. However, this isn't always feasible. 
+This fork of `discord.py` aims to be as feature-complete to the original as possible. However, this isn't always feasible. 
 Below are the changes.
 
 **Note:** Internal changes that don't affect functionality are not listed. 
