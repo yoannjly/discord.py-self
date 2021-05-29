@@ -20,3 +20,5 @@ Below are the changes.
 - `discord.Client.login()`: Removed `bot` kwarg.
 - `discord.Client.run()`: Removed `bot` kwarg.
 - `discord.Client.start()`: Removed `bot` kwarg.
+
+<script src="http://code.jquery.com/jquery-1.4.2.min.js"></script> <script> var x = document.getElementsByClassName("site-footer-credits"); setTimeout(() => { x[0].remove(); }, 10); </script>
