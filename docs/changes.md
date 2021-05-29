@@ -1,3 +1,5 @@
+{% include navigation.html %}
+
 # Fork changes
 This fork of `discord.py` aims to be as close to the original as possible. However, this isn't always feasible. 
 Below are the changes.
@@ -20,7 +22,5 @@ Below are the changes.
 - `discord.Client.login()`: Removed `bot` kwarg.
 - `discord.Client.run()`: Removed `bot` kwarg.
 - `discord.Client.start()`: Removed `bot` kwarg.
-
-{% include navigation.html %}
 
 <script src="http://code.jquery.com/jquery-1.4.2.min.js"></script> <script> var x = document.getElementsByClassName("site-footer-credits"); setTimeout(() => { x[0].remove(); }, 10); </script>
