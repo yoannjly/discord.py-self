@@ -1,9 +1,25 @@
+# Main configuration
 title: Discord.py Self
 description: A fork of the popular Discord.py for self-bots. 
 remote_theme: pmarsceill/just-the-docs
 url: "https://dolf.ml"
 baseurl: /discord.py-self
 
+# Theme settings
 last_edit_timestamp: false
 gh_edit_link: false
 color_scheme: dark
+
+# Jekyll collections
+collections:
+  docs:
+    permalink: "/:collection/:path/"
+    output: true
+
+# Collections that are used in just-the-docs
+just_the_docs:
+  collections:
+    docs:
+      name: Documentation
+      nav_exclude: false
+      search_exclude: false
