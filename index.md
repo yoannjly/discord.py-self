@@ -15,7 +15,7 @@ Check out the [about](about.html) page to learn more about the project, or read 
 
 **Self-botting/user-botting is against the Discord ToS. This library is a proof of concept and I do not recommend using it. Do so at your own risk.**
 
-Happy self-botting! 
+Hope you like reading source code!
 
 
 ### Links
