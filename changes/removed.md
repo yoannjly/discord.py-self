@@ -6,7 +6,7 @@ nav_order: 2
 ---
 
 # Removed
-This fork of `discord.py` aims to be as backwards-compatible to the original as possible. However, some things are *simply* bot only.
+This fork of `discord.py` aims to be as backwards-compatible to the original as possible. However, some things are *simply* bot only.  
 Below are the public methods that were removed.
 
 **Note:** Internal changes that don't affect functionality are not listed.
@@ -14,21 +14,21 @@ Below are the public methods that were removed.
 --------
 
 ## `~AutoShardedClient` & `~ShardInfo`
-Users cannot (and don't need to) use sharding.
+Users cannot (and don't need to) use sharding.  
 Additionally, all mentions of shards were removed from logs and errors.
 
 ## `~Intents` & `~PrivilegedIntentsRequired`
-In the past, intents worked when used with users; they even altered the gateway's functionality to more mimic the bot gateway.
+In the past, intents worked when used with users; they even altered the gateway's functionality to more mimic the bot gateway.  
 Now, they still do "function", however you no longer receive message content and embeds for users other than yourself.
 
 They also have the added disadvantage of alerting discord to the fact that you're automating your account.
 
 ## `~Client.request_offline_members()`
-This completely bypasses the check for `Permissions.manage_guild` in `~Guild.chunk()`.
+This completely bypasses the check for `Permissions.manage_guild` in `~Guild.chunk()`.  
 It's also already deprecated so not too much of a problem functionality-wise.
 
 ## `~Client.application_info()`
-This was used to return the current application's information.
+This was used to return the current application's information.  
 Users are not attached to applications.
 
 ## `~Client.intents`
@@ -48,8 +48,8 @@ Another remnant of shards (see [this](#autoshardedclient--shardinfo))
 ## `~TextChannel.delete_messages()`
 Another bot-only endpoint.
 
-In this case, there is an alternative (deleting messages one=by-one).
-However, this is already implemented in `~TextChannel.purge()`.
+In this case, there is an alternative (deleting messages one=by-one).  
+However, this is already implemented in `~TextChannel.purge()`.  
 The only point of this method was to wrap the bot-only endpoint.
 
 ## `~User.mutual_guilds`
