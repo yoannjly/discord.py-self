@@ -13,7 +13,7 @@ Below are all the shiny new things.
 
 --------
 
-#### `~Client.join_guild()`
+## `~Client.join_guild()`
 Joins a guild using an invite.
 
 **Parameters:**
@@ -22,6 +22,6 @@ Joins a guild using an invite.
 **Raises:**
 `~HTTPException`: Joining the guild failed.
 `~InvalidArgument`: Tried to join a guild you're already in.
-+
+
 **Returns:**
 `~Guild`: The guild joined. This is not the same guild that is added to cache.
