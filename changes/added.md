@@ -17,15 +17,15 @@ Below are all the shiny new things.
 Controls the library's auto-subscribing feature
 
 **Options**:  
-*auto_subscribe*   : Whether to enable the auto-subscribing.  
+*auto_subscribe*: Whether to enable the auto-subscribing.  
                      Defaults to true.  
 *concurrent_guilds*: The amount of guilds to subscribe at once. Higher = more ratelimits.  
                      Defaults to 2.  
-*max_online*       : The threshold of online members that determins whether to auto-subscribe it.  
+*max_online*: The threshold of online members that determins whether to auto-subscribe it.  
                      Defaults to 12,000.
 
 **Class Methods:**
-`default()` : Returns a `~GuildSubscriptionOptions` with the default options.
+`default()`: Returns a `~GuildSubscriptionOptions` with the default options.  
 `disabled()`: Returns a `~GuildSubscriptionOptions` with auto-subscribing off.
 
 ## `~Client.join_guild()`
