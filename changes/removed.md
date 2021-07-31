@@ -43,7 +43,7 @@ To make matters worse, attempting to use this endpoint phone-locks your account 
 Same situation as `~Client.application_info()`. Users don't have a role attached to themselves.
 
 ## `~Guild.shard_id`
-Another remnant of shards (see [this](#autoshardedclient-shardinfo--autoshardedbot))
+Another remnant of shards (see [this](#autoshardedclient-shardinfo--extcommandsautoshardedbot))
 
 ## `~TextChannel.delete_messages()`
 Another bot-only endpoint.

@@ -206,7 +206,7 @@ Returns all mutual guilds with this user.
 **Note:**  
 This is just a shortcut to `~User.profile.mutual_guilds()`
 
-## `~Guild.subcribe()`
+## `~Guild.subscribe()`
 Abuses the member sidebar to scrape all members*.
 
 *Discord doesn't provide offline members for "large" guilds.  
@@ -232,8 +232,8 @@ delay to try to avoid rate-limits.
 Like `~Guild.member_count` but for online members.  
 Only populated after a GUILD_MEMBER_LIST_UPDATE has been received (always happens if auto-subscribing is enabled).
 
-## `~Guild.subcribed`
-Like `~Guild.chunked` but for subscription status. See [this](#guild-subscribe)
+## `~Guild.subscribed`
+Like `~Guild.chunked` but for subscription status. See [this](#guildsubscribe)
 
 ## `~Invite.use()`
 Uses the invite and joins the guild.  
