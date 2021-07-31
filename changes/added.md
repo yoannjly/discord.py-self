@@ -159,12 +159,14 @@ Unmutes the guild.
 
 ## `~Member/guild_avatar_url`
 Same as `avatar_url` but for guild avatars.
+Returns the avatar url if the member doesn't have a guild avatar.
 
 ## `~Member/is_guild_avatar_animated()`
 Same as `is_avatar_animated()` but for guild avatars.
 
 ## `~Member/guild_avatar_url_as()`
 Same as `avatar_url_as()` but for guild avatars.
+Returns the avatar url if the member doesn't have a guild avatar.
 
 ## `~Profile/ClientUser.banner_url`
 Same as `avatar_url` but for banners.
@@ -233,3 +235,28 @@ Only populated after a GUILD_MEMBER_LIST_UPDATE has been received (always happen
 ## `~Guild.subcribed`
 Like `~Guild.chunked` but for subscription status. See [this](#guild-subscribe)
 
+## `~Invite.use()`
+Uses the invite and joins the guild.  
+Has an alias of `~Invite.accept()`.
+
+**Raises:**  
+`~HTTPException`: Using the invite failed.
+`~InvalidArgument`: Tried to join a guild you're already in.
+
+## `~Message.invites()`
+Retreives all valid invites in a message.
+
+**Raises:**  
+`~HTTPException`: Fetching the invites failed.
+
+**Returns:**
+`List[~Invite]`: All valid invites contained in the message.
+
+## `~Relationship.change_nickname()`
+Changes a relationship's nickname. Only applicable for friends.
+
+**Parameters:**
+*nick* `str`: The new nickname.
+
+**Raises:**  
+`~HTTPException`: Changing the nickname failed.

@@ -57,4 +57,4 @@ Introduces inconsitency and isn't as accurate as `~Profile.mutual_guilds`.
 `~User.mutual_guilds()` was added as a shortcut to the profile's mutual guilds.
 
 ## `~Utils.oauth_url()`
-Users cannot be added to guilds with an OAuth2 URL.
+Users cannot be added to guilds with an OAuth2 url.
