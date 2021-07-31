@@ -7,7 +7,7 @@ nav_order: 2
 
 # Removed
 This fork of `discord.py` aims to be as backwards-compatible to the original as possible. However, some things are *simply* bot only.  
-Below are the public methods that were removed.
+Below are the things that were removed.
 
 **Note:** Internal changes that don't affect functionality are not listed.
 
@@ -53,7 +53,8 @@ However, this is already implemented in `~TextChannel.purge()`.
 The only point of this method was to wrap the bot-only endpoint.
 
 ## `~User.mutual_guilds`
-Introduces inconsitency and isn't as accurate as `~Profile.mutual_guilds`.
+Introduces inconsitency and isn't as accurate as `~Profile.mutual_guilds`.  
+`~User.mutual_guilds()` was added as a shortcut to the profile's mutual guilds.
 
 ## `~Utils.oauth_url()`
 Users cannot be added to guilds with an OAuth2 URL.
