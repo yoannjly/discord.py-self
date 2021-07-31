@@ -49,11 +49,6 @@ Represents a note on a user.
 *note* `str`: The actual note (this raises a `~ClientException` if the note isn't fetched).  
 *user* `~User`: The `~User` attached to the note (will be an `~Object` if the user is not in the cache).
 
-## `~Settings`
-Represents the user's settings.
-
-Has way too many attributes to list here. Look at the docstring if you're interested.
-
 ### `fetch()`
 Fetches the note (and fills the note attribute).
 
@@ -77,6 +72,11 @@ Deletes the note.
 
 **Raises:**  
 `~HTTPException`: Deleting the note failed.
+
+## `~Settings`
+Represents the user's settings.
+
+Has way too many attributes to list here. Look at the docstring if you're interested.
 
 ## `~Client.join_guild()`
 Joins a guild.
@@ -233,7 +233,7 @@ Like `~Guild.member_count` but for online members.
 Only populated after a GUILD_MEMBER_LIST_UPDATE has been received (always happens if auto-subscribing is enabled).
 
 ## `~Guild.subscribed`
-Like `~Guild.chunked` but for subscription status. See [this](#guildsubscribe)
+Like `~Guild.chunked` but for subscription status. See [this](#guildsubscribe).
 
 ## `~Invite.use()`
 Uses the invite and joins the guild.  

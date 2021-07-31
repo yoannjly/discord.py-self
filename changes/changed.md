@@ -16,8 +16,6 @@ Below are all the changes in existing items.
 
 ## Misc.
 <!--- Removed `reason` parameter from everything except `kick()` and `ban()` as the X-Audit-Log-Reason header doesn't appear to work.-->
-- Changed to a generic Windows user-agent to avoid detection.
-- Changed headers to match the official client.
 - Removed `@utils.deprecated` decorator from all existing user-only methods.
 - Updated docstrings to remove deprecation notices.
 - Updated docstrings to remove mentions of bot/self-bot differences and bot limitations.
