@@ -36,7 +36,7 @@ Defaults to True.
 *concurrent_guilds* `int`: The amount of guilds to subscribe at once. Higher = more ratelimits.  
 Defaults to 2.  
 *max_online* `int`: The threshold of online members that determines whether to auto-subscribe it. Higher = slower startup.  
-Defaults to 12,000.
+Defaults to 6,000.
 
 **Class Methods:**  
 `default()`: Returns a `~GuildSubscriptionOptions` with the default options.  

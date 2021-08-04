@@ -49,12 +49,12 @@ Below are all the changes in existing items.
 - Added a *guild_subscription_options* parameter to `__init__()`. It takes a `~GuildSubscriptionOptions`.
 - Removed the *shard_id* parameter from `before_identify_hook()` and changed the default implementation to do nothing.
 - Removed the *bot* parameter from `login()`, `start()`, and `run()`.
-- Added a *logout* parameter to `close()`. This adds a POST to `/auth/logout` at the end of the process.
 - Removed all parameters from `fetch_guilds()` as they're useless.
 - Removed the region parameter from `create_guild()` as it isn't used anymore.
 - Added a *with_expiration* parameter to `fetch_invite()`. This fills in the `~Invite.expires_at` attribute.
 - Removed `on_member_remove()` and `on_member_join()` as they can't be reliably used most of the time. May revisit in the future.
-- Added *with_mutuals* and *fetch_note* parameters. The former adds *mutual_guilds* and *mutual_friends* parameters to the `~Profile` object, and the latter pre-fetches `~Profile.note`.
+- Added `on_required_action_update()`. This is sent when you get phone-locked, email-locked, etc. It passes one parameter, which is an enum of the required action.
+- Added *with_mutuals* and *fetch_note* parameters to `fetch_profile()`. The former adds *mutual_guilds* and *mutual_friends* parameters to the `~Profile` object, and the latter pre-fetches `~Profile.note`.
 
 ## `~Emoji`
 - Removed the *reason* parameter from `delete()` as it doesn't work.
