@@ -32,7 +32,7 @@ Below are all the changes in existing items.
 - Removed *reason* parameter from `edit()`, `clone()`, `create_webhook()`, and `follow()` as it doesn't work.
 - Removed *bulk* from `purge()` as bots can't use the bulk delete endpoint.
 - Changed `delete_messages()` to iterate over the messages and manually deleted (the bulk-delete endpoint isn't usable by users).
-This removes the requirement for the manage messages permission to delete your own messages, as well as the limit on the number + age of the messages. However, **this makes it much easier to get ratelimited and/or disabled**.
+This removes the requirement for the `Permissions.manage_messages` permission to delete your own messages, as well as the limit on the number + age of the messages. However, **this makes it much easier to get ratelimited and/or disabled**.
 
 ## `~VoiceChannel`
 - Removed *reason* parameter from `clone()` and `edit()` as it doesn't work.
@@ -66,7 +66,7 @@ This removes the requirement for the manage messages permission to delete your o
 - Removed the *reason* parameter from `create_text_channel()`, `create_voice_channel()`, `create_stage_channel()`, `create_category()`, `edit()`, `prune_members()`, `create_role()`, `edit_role_positions()`, `unban()` as it doesn't work.
 - Added a *with_applications* parameter to `integrations()`. It determines if the returned list includes applications.
 - Removed the *reason* and *roles* parameter from `create_custom_emoji()` as they don't work.
-- Added the requirement for the manage guild permission to `chunk()`.
+- Added the requirement for the `Permissions.manage_guild` permission to `chunk()`.
 - Added a *preferred_region* parameter to `change_voice_state()`. It is recommended to leave this as default.
 
 ## `~Invite`
