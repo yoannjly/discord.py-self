@@ -45,13 +45,6 @@ Same situation as `~Client.application_info()`. Users don't have a role attached
 ## `~Guild.shard_id`
 Another remnant of shards (see [this](#autoshardedclient-shardinfo--extcommandsautoshardedbot))
 
-## `~TextChannel.delete_messages()`
-Another bot-only endpoint.
-
-In this case, there is an alternative (deleting messages one=by-one).  
-However, this is already implemented in `~TextChannel.purge()`.  
-The only point of this method was to wrap the bot-only endpoint.
-
 ## `~User.mutual_guilds`
 Introduces inconsitency and isn't as accurate as `~Profile.mutual_guilds`.  
 `~User.mutual_guilds()` was added as a shortcut to the profile's mutual guilds.

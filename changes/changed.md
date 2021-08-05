@@ -18,7 +18,7 @@ Below are all the changes in existing items.
 <!--- Removed `reason` parameter from everything except `kick()` and `ban()` as the X-Audit-Log-Reason header doesn't appear to work.-->
 - Removed `@utils.deprecated` decorator from all existing user-only methods.
 - Updated docstrings to remove deprecation notices.
-- Updated docstrings to remove mentions of bot/self-bot differences and bot limitations.
+- Updated docstrings to remove mentions of bot/user differences and bot limitations.
 - Removed all mentions of shards from logs and errors.
 
 ## `__main__()`
@@ -31,6 +31,8 @@ Below are all the changes in existing items.
 ## `~Channel`
 - Removed *reason* parameter from `edit()`, `clone()`, `create_webhook()`, and `follow()` as it doesn't work.
 - Removed *bulk* from `purge()` as bots can't use the bulk delete endpoint.
+- Changed `delete_messages()` to iterate over the messages and manually deleted (the bulk-delete endpoint isn't usable by users).
+This removes the requirement for the manage messages permission to delete your own messages, as well as the limit on the number + age of the messages. However, **this makes it much easier to get ratelimited and/or disabled**.
 
 ## `~VoiceChannel`
 - Removed *reason* parameter from `clone()` and `edit()` as it doesn't work.
