@@ -494,7 +494,7 @@ class ConnectionState:
         self.dispatch('resumed')
 
     def parse_message_create(self, data):
-        guild_id = int(data['guild_id'])
+        guild_id = int(data.get('guild_id', 0))
         if guild_id in self._unavailable_guilds:
             return
         channel, _ = self._get_guild_channel(data)

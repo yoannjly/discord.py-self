@@ -154,7 +154,7 @@ class Account:
         else:
             invite = utils.resolve_invite(invite)
 
-        token = await http.register_from_invite(
+        token = await http.register_from_invite()
 
     async def login(self, *args, **kwargs):
         self._closed = False
