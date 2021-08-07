@@ -96,6 +96,6 @@ This removes the requirement for the `Permissions.manage_messages` permission to
 - Added a bunch of new parameters to `edit_settings()`, and made it return a `~Settings`.
 
 ## `~ext.commands.Bot`
-- Added a *user_bot* parameter to `__init__()`.
+- Added a *user_bot* parameter to `__init__()`.  
 It's similar to *self_bot*, but makes it so that the bot responds to any message, including its own.  
 You cannot set both *self_bot* and *user_bot*.

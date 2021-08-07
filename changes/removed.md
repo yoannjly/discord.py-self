@@ -39,7 +39,7 @@ Uses a bot-only endpoint and unfortunately has no user alternative.
 
 To make matters worse, attempting to use this endpoint phone-locks your account (most bot-only endpoints don't do this).
 
-## `~Guild.self_role()`
+## `~Guild.self_role`
 Same situation as `~Client.application_info()`. Users don't have a role attached to themselves.
 
 ## `~Guild.shard_id`
