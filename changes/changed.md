@@ -47,7 +47,7 @@ This removes the requirement for the `Permissions.manage_messages` permission to
 - Removed *reason* parameter from `clone()` and `edit()` as it doesn't work.
 
 ## `~Client`
-- Removed the *shard_id*, *shard_count*, *intents*, and *guild_subscriptions* parameters from `__init__()` as they aren't used.
+- Removed the *shard_id*, *shard_count*, *intents*, *guild_ready_timeout*, and *guild_subscriptions* parameters from `__init__()` as they aren't used.
 - Added a *guild_subscription_options* parameter to `__init__()`. It takes a `~GuildSubscriptionOptions`.
 - Removed the *shard_id* parameter from `before_identify_hook()` and changed the default implementation to do nothing.
 - Removed the *bot* parameter from `login()`, `start()`, and `run()`.
@@ -94,3 +94,8 @@ This removes the requirement for the `Permissions.manage_messages` permission to
 - Added *banner*, *bio*, *phone*, *settings*, and *note* attributes. The *note* attribute is a `~Note` (**not pre-fetched**). The *settings* attribute is a `~Settings`.
 - Added *discriminator*, *banner*, *accent_colour*, and *bio* parameters to `edit()`.
 - Added a bunch of new parameters to `edit_settings()`, and made it return a `~Settings`.
+
+## `~ext.commands.Bot`
+- Added a *user_bot* parameter to `__init__()`.
+It's similar to *self_bot*, but makes it so that the bot responds to any message, including its own.  
+You cannot set both *self_bot* and *user_bot*.
