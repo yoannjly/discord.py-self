@@ -13,7 +13,7 @@ This site will serve as a home for the project.
 Here you'll find the documentation and some undocumented Discord API stuff!
 Check out the [about](about.html) page to learn more about the project, or read the about the [differences](changes/)!
 
-**Self-botting/user-botting is against the Discord ToS. This library is a proof of concept and I do not recommend using it. Do so at your own risk.**
+**Automating user accounts is against the Discord ToS. This library is a proof of concept and I do not recommend using it. Do so at your own risk.**
 
 Hope you like reading source code!
 
