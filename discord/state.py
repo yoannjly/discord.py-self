@@ -243,10 +243,11 @@ class ConnectionState:
             # We use the data available to us since we
             # might not have events for that user.
             # However, the data may only have an ID.
-            try:
-                user._update(data)
-            except KeyError:
-                pass
+            if user_id != self.self_id:
+                try:
+                    user._update(data)
+                except KeyError:
+                    pass
             return user
         except KeyError:
             user = User(state=self, data=data)
@@ -417,7 +418,7 @@ class ConnectionState:
 
     def parse_ready(self, data):
         # Before parsing, we wait for READY_SUPPLEMENTAL.
-        # This has voice state objects, as well as a few other goodies.
+        # This has voice state objects, as well as an initial member cache.
         self._ready_data = data
 
     def parse_ready_supplemental(self, data):
@@ -430,6 +431,7 @@ class ConnectionState:
         extra_data = data
         data = self._ready_data
 
+        # Discord bad
         for guild_data, guild_extra, merged_members, merged_me, merged_presences in zip(
             data.get('guilds', []),
             extra_data.get('guilds', []),

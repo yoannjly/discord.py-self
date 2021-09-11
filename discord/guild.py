@@ -286,7 +286,7 @@ class Guild(Hashable):
         self.unavailable = guild.get('unavailable', False)
         self.id = int(guild['id'])
 
-        state = self._state # speed up attribute access
+        state = self._state
 
         for r in guild.get('roles', []):
             role = Role(guild=self, data=r, state=state)
@@ -329,8 +329,8 @@ class Guild(Hashable):
             if member is not None:
                 member._presence_update(presence, empty_tuple)
 
-        _large = None if member_count is None else member_count >= 250
-        self._large = guild.get('large', _large)
+        large = None if member_count is None else member_count >= 250
+        self._large = guild.get('large', large)
 
         self.owner_id = utils._get_as_snowflake(guild, 'owner_id')
         self.afk_channel = self.get_channel(utils._get_as_snowflake(guild, 'afk_channel_id'))
