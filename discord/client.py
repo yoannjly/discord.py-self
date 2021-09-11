@@ -227,7 +227,8 @@ class Client:
         state = self._connection
         activity = create_activity(state._activity)
         status = try_enum(Status, state._status)
-        self.loop.create_task(self.change_presence(activity=activity, status=status))
+        if status is not None or activity is not None:
+            self.loop.create_task(self.change_presence(activity=activity, status=status))
 
     @property
     def latency(self):
