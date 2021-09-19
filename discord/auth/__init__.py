@@ -1,5 +1,5 @@
 """
-discord.Account
+discord.Auth
 ~~~~~~~~~~~~~~~
 
 A helper module to wrap the auth APIs.

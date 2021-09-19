@@ -1484,6 +1484,11 @@ class Client:
         -------
         :exc:`.HTTPException`
             Retreiving the notes failed.
+
+        Returns
+        --------
+        List[:class:`Note`]
+            All your notes.
         """
         state = self._connection
         data = await self.http.get_notes()
@@ -1498,6 +1503,11 @@ class Client:
         -------
         :exc:`.HTTPException`
             Retreiving the note failed.
+
+        Returns
+        --------
+        :class:`Note`
+            The note you requested.
         """
         try:
             data = await self.http.get_note(user_id)

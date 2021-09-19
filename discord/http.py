@@ -112,6 +112,10 @@ class HTTPClient:
         self.proxy_auth = proxy_auth
         self.use_clock = not unsync_clock
 
+        self.user_agent = None
+        self.super_properties = {}
+        self.encoded_super_properties = None
+
     def recreate(self):
         if self.__session.closed:
             self.__session = aiohttp.ClientSession(connector=self.connector, ws_response_class=DiscordClientWebSocketResponse)

@@ -58,7 +58,6 @@ from .audit_logs import AuditLogChanges, AuditLogEntry, AuditLogDiff
 from .raw_models import *
 from .team import *
 from .sticker import Sticker
-from .accounts import Account
 
 VersionInfo = namedtuple('VersionInfo', 'major minor micro releaselevel serial')
 
