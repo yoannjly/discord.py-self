@@ -82,6 +82,8 @@ class HTTPException(DiscordException):
         The status code of the HTTP request.
     code: :class:`int`
         The Discord specific error code for the failure.
+    json: :class:`dict`
+        The raw error JSON.
     """
 
     def __init__(self, response, message):
@@ -89,6 +91,7 @@ class HTTPException(DiscordException):
         self.status = response.status
         self._text = message
         if isinstance(message, dict):
+            self.json = message
             self.code = message.get('code', 0)
             base = message.get('message', '')
             errors = message.get('errors')

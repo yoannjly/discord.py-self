@@ -389,7 +389,6 @@ class Client:
         initial: :class:`bool`
             Whether this IDENTIFY is the first initial IDENTIFY.
         """
-
         pass
 
     # login state management
@@ -401,7 +400,7 @@ class Client:
 
         .. warning::
 
-            Logging on with a user token is against the Discord
+            Logging on with a user token is unfortunately against the Discord
             `Terms of Service <https://support.discord.com/hc/en-us/articles/115002192352>`_
             and doing so might potentially get your account banned.
             Use this at your own risk.
@@ -540,6 +539,7 @@ class Client:
                 pass
 
         if self.ws is not None and self.ws.open:
+            self.ws.socket._writer.transport.close()
             await self.ws.close(code=1000)
 
         self._ready.clear()

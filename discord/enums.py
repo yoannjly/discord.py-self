@@ -56,6 +56,8 @@ __all__ = (
     'StickerAnimationOptions',
     'RelationshipAction',
     'UnavailableGuildType',
+    'RequiredActionType',
+    'BrowserEnum'
 )
 
 def _create_value_cls(name):
@@ -515,6 +517,14 @@ class RequiredActionType(Enum):
     verify_email = 'REQUIRE_VERIFIED_EMAIL'
     captcha = 'REQUIRE_CAPTCHA'
     accept_terms = 'AGREEMENTS'
+
+class BrowserEnum(Enum):
+    google_chrome = 'chrome'
+    chrome = 'chrome'
+    chromium = 'chromium'
+    microsoft_edge = 'microsoft-edge'
+    edge = 'microsoft-edge'
+    opera = 'opera'
 
 def try_enum(cls, val):
     """A function that tries to turn the value into enum ``cls``.

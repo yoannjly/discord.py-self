@@ -38,10 +38,13 @@ import aiohttp
 from .context_properties import ContextProperties
 from .enums import RelationshipAction
 from .errors import HTTPException, Forbidden, NotFound, LoginFailure, DiscordServerError#, GatewayNotFound
-from .gateway import DiscordClientWebSocketResponse
 from . import utils
 
 log = logging.getLogger(__name__)
+
+# For some reason, the Discord voice websocket expects this header to be
+# completely lowercase while aiohttp respects spec and does it as case-insensitive
+aiohttp.hdrs.WEBSOCKET = 'websocket'
 
 async def json_or_text(response):
     text = await response.text(encoding='utf-8')
@@ -90,20 +93,18 @@ class MaybeUnlock:
         if self._unlock:
             self.lock.release()
 
-# For some reason, the Discord voice websocket expects this header to be
-# completely lowercase while aiohttp respects spec and does it as case-insensitive
-aiohttp.hdrs.WEBSOCKET = 'websocket'
+class _FakeResponse:
+    def __init__(self, reason, status):
+        self.reason = reason
+        self.status = status
 
 class HTTPClient:
     """Represents an HTTP client sending HTTP requests to the Discord API."""
 
-    SUCCESS_LOG = '{method} {url} has received {text}'
-    REQUEST_LOG = '{method} {url} with {json} has returned {status}'
-
     def __init__(self, connector=None, *, proxy=None, proxy_auth=None, loop=None, unsync_clock=True):
         self.loop = asyncio.get_event_loop() if loop is None else loop
         self.connector = connector
-        self.__session = None # filled in static_login
+        self.__session = None
         self._locks = weakref.WeakValueDictionary()
         self._global_over = asyncio.Event()
         self._global_over.set()
@@ -116,20 +117,25 @@ class HTTPClient:
         self.super_properties = {}
         self.encoded_super_properties = None
 
+    def __del__(self):
+        session = self.__session
+        if session:
+            session.connector._close()
+
     def recreate(self):
         if self.__session.closed:
-            self.__session = aiohttp.ClientSession(connector=self.connector, ws_response_class=DiscordClientWebSocketResponse)
+            self.__session = aiohttp.ClientSession(connector=self.connector)
 
     async def startup_tasks(self):
-        self.user_agent = await utils._get_user_agent(self.__session)
-        self.client_build_number = await utils._get_build_number(self.__session)
-        self.browser_version = await utils._get_browser_version(self.__session)
-        self.super_properties = {
+        self.user_agent = ua = await utils._get_user_agent(self.__session)
+        self.client_build_number = bn = await utils._get_build_number(self.__session)
+        self.browser_version = bv = await utils._get_browser_version(self.__session)
+        self.super_properties = super_properties = {
             'os': 'Windows',
             'browser': 'Chrome',
             'device': '',
-            'browser_user_agent': self.user_agent,
-            'browser_version': self.browser_version,
+            'browser_user_agent': ua,
+            'browser_version': bv,
             'os_version': '10',
             'referrer': '',
             'referring_domain': '',
@@ -137,15 +143,15 @@ class HTTPClient:
             'referring_domain_current': '',
             'release_channel': 'stable',
             'system_locale': 'en-US',
-            'client_build_number': self.client_build_number,
+            'client_build_number': bn,
             'client_event_source': None
         }
         self.encoded_super_properties = b64encode(json.dumps(self.super_properties).encode()).decode('utf-8')
 
     async def ws_connect(self, url, *, compress=0, host=None):
-        websocket_key = b64encode(bytes(getrandbits(8) for _ in range(16))).decode() # Thank you Discord-S.C.U.M
+        websocket_key = b64encode(bytes(getrandbits(8) for _ in range(16))).decode()  # Thank you Discord-S.C.U.M
         if not host:
-            host = url[6:].split('?')[0].rstrip('/') # Removes the 'wss://' and the query params
+            host = url[6:].split('?')[0].rstrip('/')  # Removes the 'wss://' and the query params
         kwargs = {
             'proxy_auth': self.proxy_auth,
             'proxy': self.proxy,
@@ -160,6 +166,9 @@ class HTTPClient:
                 'Host': host,
                 'Origin': 'https://discord.com',
                 'Pragma': 'no-cache',
+                'Sec-CH-UA': '"Google Chrome";v="{0}", "Chromium";v="{0}", ";Not A Brand";v="99"'.format(self.browser_version.split('.')[0]),
+                'Sec-CH-UA-Mobile': '?0',
+                'Sec-CH-UA-Platform': '"Windows"',
                 'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
                 'Sec-WebSocket-Key': websocket_key,
                 'Sec-WebSocket-Version': '13',
@@ -202,7 +211,7 @@ class HTTPClient:
         if self.token is not None:
             headers['Authorization'] = self.token
 
-        # some checking if it's a JSON request
+        # header modification
         if 'json' in kwargs:
             headers['Content-Type'] = 'application/json'
             kwargs['data'] = utils.to_json(kwargs.pop('json'))
@@ -343,14 +352,14 @@ class HTTPClient:
 
     async def static_login(self, token):
         # Necessary to get aiohttp to stop complaining about session creation
-        self.__session = aiohttp.ClientSession(connector=self.connector, ws_response_class=DiscordClientWebSocketResponse)
+        self.__session = aiohttp.ClientSession(connector=self.connector)
         old_token = self.token
         self._token(token)
 
         await self.startup_tasks()
 
         try:
-            data = await self.request(Route('GET', '/users/@me'))
+            data = await self.request(Route('GET', '/users/@me?with_analytics_token=true'))
         except HTTPException as exc:
             self._token(old_token)
             if exc.response.status == 401:
@@ -537,7 +546,14 @@ class HTTPClient:
 
     async def get_message(self, channel_id, message_id):
         data = await self.logs_from(channel_id, 1, around=message_id)
-        return data[0]
+        try:
+            msg = data[0]
+        except IndexError:
+            raise NotFound(_FakeResponse('Not Found', 404), 'message not found')
+
+        if int(msg.get('id')) == message_id:
+            return msg
+        raise NotFound(_FakeResponse('Not Found', 404), 'message not found')
 
     def get_private_channels(self):
         return self.request(Route('GET', '/users/@me/channels'))
@@ -738,7 +754,7 @@ class HTTPClient:
             'icon': icon,
             'system_channel_id': None,
             'channels': [],
-            'guild_template_code': template
+            'guild_template_code': template  # API go brrr
         }
 
         return self.request(Route('POST', '/guilds'), json=payload)

@@ -34,6 +34,8 @@ from .asset import Asset
 from .settings import Settings
 from .object import Object
 
+from datetime import datetime
+
 class Note:
     """Represents a Discord note."""
     __slots__ = ('_state', '_note', '_user_id', '_user')
@@ -667,7 +669,7 @@ class ClientUser(BaseUser):
         -----------
         password: :class:`str`
             The current password for the client's account.
-            Required for everything except avatar, banner, accent_colour, and bio.
+            Required for everything except avatar, banner, accent_colour, date_of_birth, and bio.
         new_password: :class:`str`
             The new password you wish to change to.
         email: :class:`str`
@@ -691,6 +693,8 @@ class ClientUser(BaseUser):
         bio: :class:`str`
             Your 'about me' section.
             Could be ``None`` to represent no 'about me'.
+        date_of_birth: :class:`datetime.datetime`
+            Your date of birth.
 
         Raises
         ------
@@ -700,7 +704,8 @@ class ClientUser(BaseUser):
             Wrong image format passed for ``avatar``.
         ClientException
             Password was not passed when it was required.
-            House field was not a HypeSquadHouse.
+            `house` field was not a HypeSquadHouse.
+            `date_of_birth` field was not a :class:`datetime.datetime` object.
         """
 
         args = {}
@@ -753,6 +758,12 @@ class ClientUser(BaseUser):
                 args['bio'] = bio
             else:
                 args['bio'] = ''
+
+        if 'date_of_birth' in fields:
+            dob = fields['date_of_birth']
+            if not isinstance(dob, datetime):
+                raise ClientException('`date_of_birth` parameter was not a datetime object')
+            args['date_of_birth'] = dob.strftime('%F')
 
         http = self._state.http
 

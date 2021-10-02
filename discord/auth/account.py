@@ -31,7 +31,7 @@ from os.path import split as path_split
 import random
 import tempfile
 
-from discord.errors import LoginFailure
+from discord.errors import LoginFailure, InvalidArgument
 from discord.user import BaseUser as ClientUser # Temporary workaround until I make a custom class...
 from discord import utils
 
@@ -63,6 +63,13 @@ class Account:
         self.password = None
         self.phone = None
         self.user = None
+
+    def _ready(self, token, data, *, password=None):
+        self.token = token
+        self.email = data.get('email')
+        self.phone = data.get('phone')
+        self.password = password
+        self.user = ClientUser(state=None, data=data)
 
     def _generate_dob(self):
         min = datetime.date(1970, 1, 1)
@@ -105,30 +112,31 @@ class Account:
             log.warn('Error clearing the token cache')
             pass
 
-    def _ready(self, token, data, *, password=None):
-        self.token = token
-        self.email = data.get('email')
-        self.phone = data.get('phone')
-        self.password = password
-        self.user = ClientUser(state=None, data=data)
+    @property
+    def authenticated(self):
+        return self.token is not None
+
+    async def reset_password(self, email=None):
+        email = email or self.email
+        if email is None:
+            TypeError('register() takes 1 positional argument but 0 were given')
+
+        return self.http.reset_password(email)
 
     async def register(self, *args, **kwargs):
         self._closed = False
 
         length = len(args)
-        try:
-            if length == 1:
-                await self._unclaimed_register(*args, **kwargs)
-            elif length == 3:
-                await self._claimed_register(*args, **kwargs)
-            else:
-                raise TypeError(f'register() takes 1 or 3 positional arguments but {length} were given')
-        except:
-            await self.close()
-            raise
+        if length == 1:
+            await self._unclaimed_register(*args, **kwargs)
+        elif length == 3:
+            await self._claimed_register(*args, **kwargs)
+        else:
+            raise TypeError(f'register() takes 1 or 3 positional arguments but {length} were given')
 
     async def _claimed_register(self, username, email, password, **kwargs):
         http = self.http
+        self.loop.create_task(http.captcha_handler.prefetch_token())
         dob = kwargs.get('dob', self._generate_dob())
         spam_mail = kwargs.get('spam_mail', False)
 
@@ -141,6 +149,7 @@ class Account:
 
     async def _unclaimed_register(self, username, **kwargs):
         http = self.http
+        await http.captcha_handler.prefetch_token()
         invite = kwargs.get('invite')
         if invite is None:
             raise TypeError('register() missing 1 required keyword-only argument: \'invite\'')
@@ -154,24 +163,20 @@ class Account:
     async def login(self, *args, **kwargs):
         self._closed = False
 
-        length = len
-        try:
-            if length == 1:
-                await self._token_login(args[0], **kwargs)
-            elif length == 2:
-                await self._credential_login(args[0], args[1], **kwargs)
-            else:
-                raise TypeError(f'login() takes 1 or 2 positional arguments but {length} were given')
-        except:
-            await self.close()
-            pass
+        length = len(args)
+        if length == 1:
+            await self._token_login(args[0], **kwargs)
+        elif length == 2:
+            await self._credential_login(args[0], args[1], **kwargs)
+        else:
+            raise TypeError(f'login() takes 1 or 2 positional arguments but {length} were given')
 
     async def _token_login(self, token, **kwargs):
         if kwargs.get('undelete', False):
             raise TypeError('Cannot undelete account without credentials.')
 
         log.info('Logging in using static token')
-        data = await self.http.static_login(token.strip())
+        data = await self.http.static_login(token)
         self._ready(token, data)
 
     async def _credential_login(self, email, password, **kwargs):
@@ -197,22 +202,12 @@ class Account:
         if use_cache:
             self._update_cache()
 
-    async def logout(self):
+    async def close(self, *, logout=False):
         if self._closed:
             return
 
-        if self.use_cache:
-            try:
-                self._clear_cache(self.email)
-            except AttributeError:  # Unclaimed accounts cannot be cached
-                pass
-
-        await self.http.logout()
-        await self.close()
-
-    async def close(self):
-        if self._closed:
-            return
+        if logout:
+            await self.http.logout()
 
         self._clear()
 

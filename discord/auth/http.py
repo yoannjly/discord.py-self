@@ -32,7 +32,6 @@ import aiohttp
 
 from discord.context_properties import ContextProperties
 from discord.errors import HTTPException, Forbidden, NotFound, LoginFailure, DiscordServerError
-from discord.gateway import DiscordClientWebSocketResponse
 from discord.http import json_or_text
 from discord import utils
 
@@ -56,18 +55,23 @@ class AuthClient:
         self.token = None
         self.fingerprint = None
 
+    def __del__(self):
+        session = self.session
+        if session:
+            session.connector._close()
+
     async def startup(self):
         self._started = True
-        self.session = aiohttp.ClientSession(connector=self.connector, ws_response_class=DiscordClientWebSocketResponse)
-        self.user_agent = await utils._get_user_agent(self.session)
-        self.client_build_number = await utils._get_build_number(self.session)
-        self.browser_version = await utils._get_browser_version(self.session)
-        self.super_properties = {
+        self.session = aiohttp.ClientSession(connector=self.connector)
+        self.user_agent = ua = await utils._get_user_agent(self.session)
+        self.client_build_number = bn = await utils._get_build_number(self.session)
+        self.browser_version = bv = await utils._get_browser_version(self.session)
+        self.super_properties = super_properties = {
             'os': 'Windows',
             'browser': 'Chrome',
             'device': '',
-            'browser_user_agent': self.user_agent,
-            'browser_version': self.browser_version,
+            'browser_user_agent': ua,
+            'browser_version': bv,
             'os_version': '10',
             'referrer': '',
             'referring_domain': '',
@@ -75,15 +79,15 @@ class AuthClient:
             'referring_domain_current': '',
             'release_channel': 'stable',
             'system_locale': 'en-US',
-            'client_build_number': self.client_build_number,
+            'client_build_number': bn,
             'client_event_source': None
         }
-        self.encoded_super_properties = b64encode(json.dumps(self.super_properties).encode()).decode('utf-8')
+        self.encoded_super_properties = b64encode(json.dumps(super_properties).encode()).decode('utf-8')
 
     async def ws_connect(self, url, *, compress=0, host=None):
-        websocket_key = b64encode(bytes(getrandbits(8) for _ in range(16))).decode() # Thank you Discord-S.C.U.M
+        websocket_key = b64encode(bytes(getrandbits(8) for _ in range(16))).decode()  # Thank you Discord-S.C.U.M
         if not host:
-            host = url[6:].split('?')[0].rstrip('/') # Removes the 'wss://' and the query params
+            host = url[6:].split('?')[0].rstrip('/')  # Removes the 'wss://' and the query params
         kwargs = {
             'proxy_auth': self.proxy_auth,
             'proxy': self.proxy,
@@ -98,6 +102,9 @@ class AuthClient:
                 'Host': host,
                 'Origin': 'https://discord.com',
                 'Pragma': 'no-cache',
+                'Sec-CH-UA': '"Google Chrome";v="{0}", "Chromium";v="{0}", ";Not A Brand";v="99"'.format(self.browser_version.split('.')[0]),
+                'Sec-CH-UA-Mobile': '?0',
+                'Sec-CH-UA-Platform': '"Windows"',
                 'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
                 'Sec-WebSocket-Key': websocket_key,
                 'Sec-WebSocket-Version': '13',
@@ -114,7 +121,7 @@ class AuthClient:
             await self.startup()
 
         if not self.session:
-            self.session = aiohttp.ClientSession(connector=self.connector, ws_response_class=DiscordClientWebSocketResponse)
+            self.session = aiohttp.ClientSession(connector=self.connector)
 
         method = verb
         url = (self.BASE + url)
@@ -128,7 +135,7 @@ class AuthClient:
             'Connection': 'keep-alive',
             'Origin': 'https://discord.com',
             'Pragma': 'no-cache',
-            'Referer': 'https://discord.com',
+            'Referer': 'https://discord.com/',
             'Sec-Fetch-Dest': 'empty',
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Site': 'same-origin',
@@ -144,7 +151,7 @@ class AuthClient:
                 raise AttributeError('Fingerprint cannot be found')
             headers['X-Fingerprint'] = self.fingerprint
 
-        # some checking if it's a JSON request
+        # Header modification
         if 'json' in kwargs:
             headers['Content-Type'] = 'application/json'
             kwargs['data'] = utils.to_json(kwargs.pop('json'))
@@ -204,11 +211,6 @@ class AuthClient:
                         await asyncio.sleep(1 + tries * 2)
                         continue
 
-                    # out of tokens (built-in captcha handling)
-                    if r.status == 425:
-                        await asyncio.sleep(1)
-                        continue
-
                     # the usual error cases
                     if r.status == 403:
                         raise Forbidden(r, data)
@@ -236,12 +238,15 @@ class AuthClient:
         if self.session:
             await self.session.close()
             self.session = None
+        self.token = None
+        self.fingerprint = None
 
     # API wraps
 
     async def static_login(self, token):
+        self.token = token
         try:
-            data = await self.request('GET', '/users/@me', auth=True, referer='https://discord.com/channels/@me')
+            data = await self.request('GET', '/users/@me?with_analytics_token=true', auth=True, referer='https://discord.com/channels/@me')
         except HTTPException as exc:
             if exc.response.status == 401:
                 raise LoginFailure('Improper token has been passed.') from exc
@@ -257,7 +262,7 @@ class AuthClient:
         return self.request('GET', f'/invites/{invite_id}', auth=True, fingerprint=True,
                             referer=f'https://discord.com/invite/{invite_id}', params=params)
 
-    async def get_fingerprint(self, *, mode, referer=None):
+    async def get_fingerprint(self, mode, *, referer=None):
         self.token = None
         if mode == 0:  # Home page
             data = await self.request('GET', '/experiments', super_properties_to_track=True)
@@ -278,13 +283,22 @@ class AuthClient:
         self.fingerprint = fingerprint = data['fingerprint']
         return fingerprint
 
+    def get_location_metadata(self, referer=None):
+        if referer is None:
+            return self.request('GET', '/auth/location-metadata', super_properties_to_track=True)
+        return self.request('GET', '/auth/location-metadata', auth=True, fingerprint=True, referer=referer)
+
     async def register_from_invite(self, invite_id, username):
         # Prepare environment
+        captcha_handler = self.captcha_handler
         referer = f'https://discord.com/invite/{invite_id}'
-        fingerprint = await self.get_fingerprint(mode=1, referer=referer)
+        fingerprint = await self.get_fingerprint(1, referer=referer)
 
         # Get the invite (useless to us)
         await self.get_invite(invite_id)
+
+        # Get location metadata (useless to us)
+        await self.get_location_metadata(referer)
 
         # Construct the payload (captcha_key may be required later)
         payload = {
@@ -302,9 +316,12 @@ class AuthClient:
                                       referer=referer, json=payload)
         except HTTPException as exc:
             if 'captcha_key' in exc._text:
-                if captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
+                if exc._text['captcha_key'][0] != 'captcha-required':
+                    payload['captcha_key'] = exc._text['captcha_key'][0]
+                elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
                     raise LoginFailure('Captcha required.') from exc
-                payload['captcha_key'] = await self.captcha_handler(exc._text, request=self.request)
+                else:
+                    payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
             else:
                 raise
         else:
@@ -319,16 +336,23 @@ class AuthClient:
 
     async def register(self, username, email, password, dob, *, spam_mail):
         # Prepare environment
-        referer = 'https://discord.com/register'
         captcha_handler = self.captcha_handler
+        referer = 'https://discord.com/register'
         fingermode = choice((0, 2))
-        fingerprint = await self.get_fingerprint(mode=fingermode)
+        fingerprint = await self.get_fingerprint(fingermode)
 
-        # Get experiments (useless to us)
+        if fingermode == 0:
+            # Get location metadata (useless to us)
+            await self.get_location_metadata()
+
         if fingermode == 2:
+            # Get experiments (useless to us)
             context_properties = ContextProperties._from_register()
             await self.request('GET', '/experiments', auth=True, fingerprint=True,
                                referer=referer, context_properties=context_properties)
+
+        # Get location metadata (useless to us)
+        await self.get_location_metadata(referer)
 
         # Construct the payload (captcha_key may be required later)
         payload = {
@@ -350,9 +374,13 @@ class AuthClient:
                                       referer=referer, json=payload)
         except HTTPException as exc:
             if 'captcha_key' in exc._text:
-                if captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
+                if exc._text['captcha_key'][0] != 'captcha-required':
+                    payload['captcha_key'] = exc._text['captcha_key'][0]
+                elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
                     raise LoginFailure('Captcha required.') from exc
-                payload['captcha_key'] = await captcha_handler(exc._text)
+                else:
+                    breakpoint()
+                    payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
             else:
                 raise
         else:
@@ -367,15 +395,23 @@ class AuthClient:
 
     async def login(self, email, password, *, undelete):
         # Prepare environment
+        captcha_handler = self.captcha_handler
         referer = 'https://discord.com/login'
         fingermode = choice((0, 3))
-        await self.get_fingerprint(mode=fingermode)
+        await self.get_fingerprint(fingermode)
 
-        # Get experiments (useless to us)
+        if fingermode == 0:
+            # Get location metadata (useless to us)
+            await self.get_location_metadata()
+
         if fingermode == 3:
+            # Get experiments (useless to us)
             context_properties = ContextProperties._from_login()
             await self.request('GET', '/experiments', auth=True, fingerprint=True,
                                referer=referer, context_properties=context_properties)
+
+        # Get location metadata (useless to us)
+        await self.get_location_metadata(referer)
 
         # Construct the payload (captcha_key may be required later)
         payload = {
@@ -387,38 +423,76 @@ class AuthClient:
             'undelete': undelete
         }
 
-        # Try 1 (without captcha)
-        try:
-            data = await self.request('POST', '/auth/login', auth=True, fingerprint=True,
-                                      referer=referer, json=payload)
-        except HTTPException as exc:
-            if exc.code == 50035:
-                raise LoginFailure('Improper email/password has been passed.') from exc
-            elif 'captcha_key' in exc._text:
-                if captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
-                    raise LoginFailure('Captcha required.') from exc
-                payload['captcha_key'] = await self.captcha_handler(exc._text)
-            else:
-                raise
-        else:
-            self.token = token = data['token']
-            return token
-
-        # Try 2 (with captcha)
-        try:
-            data = await self.request('POST', '/auth/login', auth=True, fingerprint=True,
-                                      referer=referer, json=payload)
-        except HTTPException as exc:
-            if exc.response.status == 400:
+        for tries in range(5):
+            try:
+                data = await self.request('POST', '/auth/login', auth=True, fingerprint=True,
+                                          referer=referer, json=payload)
+            except HTTPException as exc:
                 if exc.code == 50035:
                     raise LoginFailure('Improper email/password has been passed.') from exc
-            raise
-        else:
-            self.token = token = data['token']
-            return token
+                elif tries == 4:
+                    raise
+                elif 'captcha_key' in exc._text:
+                    if exc._text['captcha_key'][0] != 'captcha-required':
+                        payload['captcha_key'] = exc._text['captcha_key'][0]
+                    elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
+                        raise LoginFailure('Captcha required.') from exc
+                    else:
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+            else:
+                self.token = token = data['token']
+                return token
+
+    async def reset_password(self, email):
+        # Prepare environment
+        old_token = self.token
+        captcha_handler = self.captcha_handler
+        referer = 'https://discord.com/login'
+        fingermode = choice((0, 3))
+        await self.get_fingerprint(fingermode)
+
+        if fingermode == 0:
+            # Get location metadata (useless to us)
+            await self.get_location_metadata()
+
+        if fingermode == 3:
+            # Get experiments (useless to us)
+            context_properties = ContextProperties._from_login()
+            await self.request('GET', '/experiments', auth=True, fingerprint=True,
+                               referer=referer, context_properties=context_properties)
+
+        # Get location metadata (useless to us)
+        await self.get_location_metadata(referer)
+
+        # Construct the payload (captcha_key may be required later)
+        payload = {
+            'captcha_key': None,
+            'login': email
+        }
+
+        for tries in range(5):
+            try:
+                await self.request('POST', '/auth/forgot', auth=True, fingerprint=True,
+                                   referer=referer, json=payload)
+            except HTTPException as exc:
+                if exc.code == 50035:
+                    raise LoginFailure('Improper email has been passed.') from exc
+                elif tries == 4:
+                    self.token = old_token
+                    raise
+                elif 'captcha_key' in exc._text:
+                    if exc._text['captcha_key'][0] != 'captcha-required':
+                        payload['captcha_key'] = exc._text['captcha_key'][0]
+                    elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
+                        raise LoginFailure('Captcha required.') from exc
+                    else:
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+            else:
+                self.token = old_token
+                return
 
     def logout(self):
-        payload = {  # Not sure what these are
+        payload = {  # ???
             'provider': None,
             'voip_provider': None
         }
