@@ -79,7 +79,6 @@ class _Harvester(Flask):  # Inspired from https://github.com/NoahCardoza/Captcha
             token = request.form.get('h-captcha-response')
             if token:
                 await self.__tokens.put(token)
-            #return '<meta http-equiv="refresh" content="0">'  # Refresh page
             return ('', 204)
 
     async def api_tokens(self):
@@ -230,13 +229,11 @@ class CaptchaSolver(CaptchaHandler):
             browser.stop()
 
     async def prefetch_token(self):
-        print('prefetch() called')
         if self.tokens.empty():
             self.launch_browser()
             timer = Timer(15, self.stop_browser)
 
     async def fetch_token(self, type, data):
-        print('fetch() called')
         assert type == 'hcaptcha'
 
         if self.tokens.empty():

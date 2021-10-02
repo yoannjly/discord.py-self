@@ -37,7 +37,7 @@ import aiohttp
 
 from .context_properties import ContextProperties
 from .enums import RelationshipAction
-from .errors import HTTPException, Forbidden, NotFound, LoginFailure, DiscordServerError#, GatewayNotFound
+from .errors import HTTPException, Forbidden, NotFound, AuthFailure, DiscordServerError#, GatewayNotFound
 from . import utils
 
 log = logging.getLogger(__name__)
@@ -363,7 +363,7 @@ class HTTPClient:
         except HTTPException as exc:
             self._token(old_token)
             if exc.response.status == 401:
-                raise LoginFailure('Improper token has been passed.') from exc
+                raise AuthFailure('Improper token has been passed.') from exc
             raise
 
         return data
@@ -1103,7 +1103,7 @@ class HTTPClient:
 
     async def get_gateway(self, *, encoding='json', v=6, zlib=True):
         # The gateway URL hasn't changed for over 5 years. And,
-        # the official clients are going to stop using it. Sooooo...
+        # the official clients aren't using it anymore. Sooooo...
 
         #try:
             #data = await self.request(Route('GET', '/gateway'))

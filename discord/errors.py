@@ -150,7 +150,7 @@ class InvalidArgument(ClientException):
     """
     pass
 
-class LoginFailure(ClientException):
+class AuthFailure(ClientException):
     """Exception that's thrown when the :meth:`Client.login` function
     fails to log you in from improper credentials or some other misc.
     failure.

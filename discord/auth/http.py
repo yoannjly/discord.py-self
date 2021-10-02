@@ -31,7 +31,7 @@ from random import choice, getrandbits
 import aiohttp
 
 from discord.context_properties import ContextProperties
-from discord.errors import HTTPException, Forbidden, NotFound, LoginFailure, DiscordServerError
+from discord.errors import HTTPException, Forbidden, NotFound, AuthFailure, DiscordServerError, InvalidData
 from discord.http import json_or_text
 from discord import utils
 
@@ -202,7 +202,7 @@ class AuthClient:
                             raise HTTPException(r, data)
 
                         retry_after = data['retry_after'] / 1000.0
-                        log.warning('We are being rate limited. Retrying in %.2f seconds. Handled under the bucket "auth"', retry_after)
+                        log.warning('We are being rate limited. Retrying in %.2f seconds. Handled under the bucket "None"', retry_after)
                         await asyncio.sleep(retry_after)
                         continue
 
@@ -249,7 +249,7 @@ class AuthClient:
             data = await self.request('GET', '/users/@me?with_analytics_token=true', auth=True, referer='https://discord.com/channels/@me')
         except HTTPException as exc:
             if exc.response.status == 401:
-                raise LoginFailure('Improper token has been passed.') from exc
+                raise AuthFailure('Improper token has been passed.') from exc
             raise
         else:
             return data
@@ -310,29 +310,33 @@ class AuthClient:
             'username': username
         }
 
-        # Try 1 (without captcha)
-        try:
-            data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
-                                      referer=referer, json=payload)
-        except HTTPException as exc:
-            if 'captcha_key' in exc._text:
-                if exc._text['captcha_key'][0] != 'captcha-required':
-                    payload['captcha_key'] = exc._text['captcha_key'][0]
-                elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
-                    raise LoginFailure('Captcha required.') from exc
+        for tries in range(5):
+            try:
+                data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
+                                          referer=referer, json=payload)
+            except HTTPException as exc:
+                if exc.code == 50035:
+                    raise AuthFailure(exc.text or 'Unknown error') from exc
+                elif tries == 4:
+                    raise
+                elif captcha_key := exc._text.get('captcha_key'):
+                    values = [i for i in captcha_key if i in ('incorrect-captcha', 'response-already-used', 'captcha-required')]
+                    if values is None:
+                        raise InvalidData(f'Please open an issue with this info: {exc._text.get("captcha_key")}') from exc
+                    elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
+                        raise AuthFailure('Captcha required.') from exc
+                    else:
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
                 else:
-                    payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+                    raise
             else:
-                raise
-        else:
+                self.token = token = data['token']
+                return token
+
+            data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
+                                        referer=referer, json=payload)
             self.token = token = data['token']
             return token
-
-        # Try 2 (with captcha)
-        data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
-                                      referer=referer, json=payload)
-        self.token = token = data['token']
-        return token
 
     async def register(self, username, email, password, dob, *, spam_mail):
         # Prepare environment
@@ -368,30 +372,26 @@ class AuthClient:
             'username': username
         }
 
-        # Try 1 (without captcha)
-        try:
-            data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
-                                      referer=referer, json=payload)
-        except HTTPException as exc:
-            if 'captcha_key' in exc._text:
-                if exc._text['captcha_key'][0] != 'captcha-required':
-                    payload['captcha_key'] = exc._text['captcha_key'][0]
-                elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
-                    raise LoginFailure('Captcha required.') from exc
-                else:
-                    breakpoint()
-                    payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+        for tries in range(5):
+            try:
+                data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
+                                          referer=referer, json=payload)
+            except HTTPException as exc:
+                if exc.code == 50035:
+                    raise AuthFailure(exc.text or 'Unknown error') from exc
+                elif tries == 4:
+                    raise
+                elif captcha_key := exc._text.get('captcha_key'):
+                    values = [i for i in captcha_key if i in ('incorrect-captcha', 'response-already-used', 'captcha-required')]
+                    if values is None:
+                        raise InvalidData(f'Please open an issue with this info: {exc._text.get("captcha_key")}') from exc
+                    elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
+                        raise AuthFailure('Captcha required.') from exc
+                    else:
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
             else:
-                raise
-        else:
-            self.token = token = data['token']
-            return token
-
-        # Try 2 (with captcha)
-        data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
-                                  referer=referer, json=payload)
-        self.token = token = data['token']
-        return token
+                self.token = token = data['token']
+                return token
 
     async def login(self, email, password, *, undelete):
         # Prepare environment
@@ -429,14 +429,15 @@ class AuthClient:
                                           referer=referer, json=payload)
             except HTTPException as exc:
                 if exc.code == 50035:
-                    raise LoginFailure('Improper email/password has been passed.') from exc
+                    raise AuthFailure(exc.text or 'Unknown error') from exc
                 elif tries == 4:
                     raise
-                elif 'captcha_key' in exc._text:
-                    if exc._text['captcha_key'][0] != 'captcha-required':
-                        payload['captcha_key'] = exc._text['captcha_key'][0]
+                elif captcha_key := exc._text.get('captcha_key'):
+                    values = [i for i in captcha_key if i in ('incorrect-captcha', 'response-already-used', 'captcha-required')]
+                    if values is None:
+                        raise InvalidData(f'Please open an issue with this info: {exc._text.get("captcha_key")}') from exc
                     elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
-                        raise LoginFailure('Captcha required.') from exc
+                        raise AuthFailure('Captcha required.') from exc
                     else:
                         payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
             else:
@@ -476,15 +477,16 @@ class AuthClient:
                                    referer=referer, json=payload)
             except HTTPException as exc:
                 if exc.code == 50035:
-                    raise LoginFailure('Improper email has been passed.') from exc
+                    raise AuthFailure(exc.text or 'Unknown error') from exc
                 elif tries == 4:
                     self.token = old_token
                     raise
-                elif 'captcha_key' in exc._text:
-                    if exc._text['captcha_key'][0] != 'captcha-required':
-                        payload['captcha_key'] = exc._text['captcha_key'][0]
+                elif captcha_key := exc._text.get('captcha_key'):
+                    values = [i for i in captcha_key if i in ('incorrect-captcha', 'response-already-used', 'captcha-required')]
+                    if values is None:
+                        raise InvalidData(f'Please open an issue with this info: {exc._text.get("captcha_key")}') from exc
                     elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
-                        raise LoginFailure('Captcha required.') from exc
+                        raise AuthFailure('Captcha required.') from exc
                     else:
                         payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
             else:

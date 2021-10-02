@@ -31,7 +31,7 @@ from os.path import split as path_split
 import random
 import tempfile
 
-from discord.errors import LoginFailure, InvalidArgument
+from discord.errors import AuthFailure, InvalidArgument
 from discord.user import BaseUser as ClientUser # Temporary workaround until I make a custom class...
 from discord import utils
 
@@ -136,7 +136,8 @@ class Account:
 
     async def _claimed_register(self, username, email, password, **kwargs):
         http = self.http
-        self.loop.create_task(http.captcha_handler.prefetch_token())
+        if http.captcha_handler:
+            self.loop.create_task(http.captcha_handler.prefetch_token())
         dob = kwargs.get('dob', self._generate_dob())
         spam_mail = kwargs.get('spam_mail', False)
 
@@ -149,7 +150,8 @@ class Account:
 
     async def _unclaimed_register(self, username, **kwargs):
         http = self.http
-        await http.captcha_handler.prefetch_token()
+        if http.captcha_handler:
+            self.loop.create_task(http.captcha_handler.prefetch_token())
         invite = kwargs.get('invite')
         if invite is None:
             raise TypeError('register() missing 1 required keyword-only argument: \'invite\'')
@@ -189,7 +191,7 @@ class Account:
             if token is not None:
                 try:
                     data = await http.static_login(token)
-                except LoginFailure:
+                except AuthFailure:
                     log.info('Cached token is invalid')
                 else:
                     self._ready(token, data, password=password)
