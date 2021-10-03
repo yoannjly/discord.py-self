@@ -106,25 +106,7 @@ class CaptchaHandler:
     way than the built-in library implementation.
 
     These classes are passed to :class:`auth.Account`.
-
-    Parameters
-    -----------
-    domain: :class:`str`
-        The base domain serving the captcha. Should always be 'discord.com'.
-    sitekey: :class:`str`
-        The domain's sitekey. The one for hCaptcha is 'f5561ba9-8f1e-40ca-9b5b-a0b3f719ef34'.
-
-    Attributes
-    -----------
-    domain: :class:`str`
-        The configured base domain serving the captcha.
-    sitekey: :class:`str`
-        The configured sitekey.
     """
-
-    def __init__(self, domain, sitekey):
-        self.domain = domain
-        self.sitekey = sitekey
 
     async def prefetch_token(self):
         """|coro|
@@ -136,7 +118,7 @@ class CaptchaHandler:
         """
         raise NotImplementedError
 
-    async def fetch_token(self, type, data):
+    async def fetch_token(self, data):
         """|coro|
 
         An abstract method that is called to fetch a captcha token.
@@ -146,8 +128,6 @@ class CaptchaHandler:
 
         Parameters
         ------------
-        type: :class:`str`
-            The type of captcha. Only one currently known is 'hcaptcha'.
         data: :class:`str`
             The raw error from Discord containing the captcha info.
 
@@ -189,7 +169,8 @@ class CaptchaSolver(CaptchaHandler):
         if not has_flask:
             raise RuntimeError("Flask library needed in order to use this handler")
 
-        super().__init__(domain, sitekey)
+        self.domain = domain
+        self.sitekey = sitekey
 
         self.server = (host, port)
         self.browser = Browser(browser)
@@ -233,8 +214,8 @@ class CaptchaSolver(CaptchaHandler):
             self.launch_browser()
             timer = Timer(15, self.stop_browser)
 
-    async def fetch_token(self, type, data):
-        assert type == 'hcaptcha'
+    async def fetch_token(self, data):
+        assert data.get('captcha_service') == 'hcaptcha'
 
         if self.tokens.empty():
             self.launch_browser()

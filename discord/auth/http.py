@@ -326,7 +326,7 @@ class AuthClient:
                     elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
                         raise AuthFailure('Captcha required.') from exc
                     else:
-                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text)
                 else:
                     raise
             else:
@@ -388,7 +388,7 @@ class AuthClient:
                     elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
                         raise AuthFailure('Captcha required.') from exc
                     else:
-                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text)
             else:
                 self.token = token = data['token']
                 return token
@@ -439,7 +439,7 @@ class AuthClient:
                     elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
                         raise AuthFailure('Captcha required.') from exc
                     else:
-                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text)
             else:
                 self.token = token = data['token']
                 return token
@@ -488,7 +488,7 @@ class AuthClient:
                     elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
                         raise AuthFailure('Captcha required.') from exc
                     else:
-                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text.get('captcha_service'), exc._text)
+                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text)
             else:
                 self.token = old_token
                 return
