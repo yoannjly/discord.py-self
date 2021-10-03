@@ -57,7 +57,7 @@ class _Harvester(Flask):  # Inspired from https://github.com/NoahCardoza/Captcha
                 self.add_url_rule(f'/api/{attr[4:].replace("_", "-")}', view_func=func)
 
     def run(self, *args, **kwargs):
-        target = partial(super().run, *args, **kwargs, host=self.__host, port=self.__port, ssl_context='adhoc')
+        target = partial(super().run, *args, **kwargs, host=self.__host, port=self.__port, ssl_context='adhoc', use_reloader=False)
         thread = Thread(target=target, daemon=True)
         thread.start()
 
