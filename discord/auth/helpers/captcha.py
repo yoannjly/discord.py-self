@@ -165,7 +165,7 @@ class CaptchaSolver(CaptchaHandler):
         The browser instance of the captcha handler.
     """
     def __init__(self, browser=None, domain='discord.com', sitekey='f5561ba9-8f1e-40ca-9b5b-a0b3f719ef34',
-                 *, host='127.0.0.1', port=5000):
+                 *, host='127.0.0.1', port=5000, log=False):
         if not has_flask:
             raise RuntimeError("Flask library needed in order to use this handler")
 
@@ -174,7 +174,7 @@ class CaptchaSolver(CaptchaHandler):
 
         self.server = (host, port)
         self.browser = Browser(browser)
-        self.harvester = harvester = _Harvester(domain, sitekey, host=host, port=port)
+        self.harvester = harvester = _Harvester(domain, sitekey, host=host, port=port, log=log)
         harvester.run()
 
     @cached_property
