@@ -93,9 +93,6 @@ class _Harvester(Flask):  # Inspired from https://github.com/NoahCardoza/Captcha
             return ('Out of tokens.', 425)
         return await tokens.get()
 
-    def launch_browser(self, browser=None, width=400, height=500, args=[], extensions=None):
-        return Browser(browser)
-
 class CaptchaHandler:
     """A class that represents a captcha handler.
 
