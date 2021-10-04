@@ -25,19 +25,20 @@ DEALINGS IN THE SOFTWARE.
 """
 
 import asyncio
-from base64 import b64encode
-from datetime import datetime
 import json
 import logging
+import weakref
+from base64 import b64encode
+from datetime import datetime
 from random import choice, getrandbits
 from urllib.parse import quote as _uriquote
-import weakref
 
 import aiohttp
 
+from . import utils
 from .context_properties import ContextProperties
 from .enums import RelationshipAction
-from .errors import HTTPException, Forbidden, NotFound, AuthFailure, DiscordServerError#, GatewayNotFound
+from .errors import HTTPException, Forbidden, NotFound, AuthFailure, DiscordServerError
 from . import utils
 
 log = logging.getLogger(__name__)
@@ -765,7 +766,7 @@ class HTTPClient:
                       'system_channel_id', 'default_message_notifications',
                       'description', 'explicit_content_filter', 'banner',
                       'system_channel_flags', 'rules_channel_id',
-                      'public_updates_channel_id', 'preferred_locale',)
+                      'public_updates_channel_id', 'preferred_locale', 'features')
         payload = {
             k: v for k, v in fields.items() if k in valid_keys
         }
@@ -1024,6 +1025,13 @@ class HTTPClient:
     def move_member(self, user_id, guild_id, channel_id):
         return self.edit_member(guild_id=guild_id, user_id=user_id, channel_id=channel_id)
 
+    def change_voice_region_in_private_channel(self, channel_id, voice_region):
+        payload = {
+            'region': voice_region
+        }
+        r = Route('PATCH', '/channels/{channel_id}/call', channel_id=channel_id)
+        return self.request(r, json=payload)
+
     # Relationship related
 
     def get_relationships(self):
@@ -1124,7 +1132,6 @@ class HTTPClient:
         params = {
             'with_mutual_guilds': str(with_mutual_guilds).lower()
         }
-
         return self.request(Route('GET', '/users/{user_id}/profile', user_id=user_id), params=params)
 
     def get_mutual_friends(self, user_id):
@@ -1143,7 +1150,9 @@ class HTTPClient:
         return self.request(Route('PUT', '/users/@me/notes/{user_id}', user_id=user_id), json=payload)
 
     def change_hypesquad_house(self, house_id):
-        payload = {'house_id': house_id}
+        payload = {
+            'house_id': house_id
+        }
         return self.request(Route('POST', '/hypesquad/online'), json=payload)
 
     def leave_hypesquad_house(self):
@@ -1182,6 +1191,15 @@ class HTTPClient:
 
     def get_team(self, team_id):
         return self.request(Route('GET', '/teams/{team_id}', team_id=team_id), super_properties_to_track=True)
+
+    def report(self, guild_id, channel_id, message_id, reason):
+        payload = {
+            'guild_id': guild_id,
+            'channel_id': channel_id,
+            'message_id': message_id,
+            'reason': reason
+        }
+        return self.request(Route('POST', '/report'), json=payload)
 
     def disable_account(self, password):
         payload = {
