@@ -25,14 +25,20 @@ DEALINGS IN THE SOFTWARE.
 """
 
 import discord.abc
-from .flags import PublicUserFlags
-from .utils import snowflake_time, _bytes_to_base64_data, parse_time, cached_slot_property
-from .enums import DefaultAvatar, FriendFlags, StickerAnimationOptions, Theme, UserContentFilter, RelationshipAction, RelationshipType, UserFlags, HypeSquadHouse, PremiumType, try_enum
-from .errors import ClientException, NotFound
-from .colour import Colour
+
 from .asset import Asset
-from .settings import Settings
+from .colour import Colour
+from .enums import (DefaultAvatar, HypeSquadHouse, PremiumType,
+                    RelationshipAction, RelationshipType, UserFlags, try_enum)
+from .errors import ClientException, NotFound
+from .flags import PublicUserFlags
 from .object import Object
+from .settings import Settings
+from .utils import (_bytes_to_base64_data, cached_slot_property, parse_time,
+                    snowflake_time)
+
+
+from datetime import datetime
 
 from datetime import datetime
 
@@ -56,7 +62,7 @@ class Note:
         ClientException
             Attempted to access note without fetching it.
         """
-        if note == 0:
+        if self._note == 0:
             raise ClientException('Note is not fetched.')
         return self._note
 
@@ -1001,7 +1007,7 @@ class ClientUser(BaseUser):
 
     accent_color = accent_colour
 
-    def disable(self, password):
+    async def disable(self, password):
         """|coro|
 
         Disables the client's account.
@@ -1018,9 +1024,9 @@ class ClientUser(BaseUser):
         HTTPException
             Disabling the account failed.
         """
-        return self._state.http.disable_account(password)
+        return await self._state.http.disable_account(password)
 
-    def delete(self, password):
+    async def delete(self, password):
         """|coro|
 
         Deletes the client's account.
@@ -1037,7 +1043,8 @@ class ClientUser(BaseUser):
         HTTPException
             Deleting the account failed.
         """
-        return self._state.http.delete_account(password)
+        return await self._state.http.delete_account(password)
+
 
 class User(BaseUser, discord.abc.Messageable):
     """Represents a Discord user.
