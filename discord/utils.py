@@ -649,8 +649,7 @@ class Browser:  # Inspired from https://github.com/NoahCardoza/CaptchaHarvester
         'Windows': {
             'chrome': functools.partial(get_windows_browser, 'chrome'),
             'chromium': functools.partial(get_windows_browser, 'chromium'),
-            'microsoft-edge': lambda: os.environ.get('ProgramFiles(x86)',
-                                                     'C:\\Program Files (x86)') + '\\Microsoft\\Edge\\Application\\msedge.exe',
+            'microsoft-edge': functools.partial(get_windows_browser, 'msedge'),
             'opera': functools.partial(get_windows_browser, 'opera'),
         },
         'Darwin': {
