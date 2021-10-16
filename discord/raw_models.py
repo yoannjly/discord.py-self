@@ -47,6 +47,7 @@ class RawMessageDeleteEvent(_RawReprMixin):
     __slots__ = ('message_id', 'channel_id', 'guild_id', 'cached_message')
 
     def __init__(self, data):
+        self._data = data
         self.message_id = int(data['id'])
         self.channel_id = int(data['channel_id'])
         self.cached_message = None
@@ -73,6 +74,7 @@ class RawBulkMessageDeleteEvent(_RawReprMixin):
     __slots__ = ('message_ids', 'channel_id', 'guild_id', 'cached_messages')
 
     def __init__(self, data):
+        self._data = data
         self.message_ids = {int(x) for x in data.get('ids', [])}
         self.channel_id = int(data['channel_id'])
         self.cached_messages = []
@@ -108,6 +110,7 @@ class RawMessageUpdateEvent(_RawReprMixin):
     __slots__ = ('message_id', 'channel_id', 'guild_id', 'data', 'cached_message')
 
     def __init__(self, data):
+        self._data = data
         self.message_id = int(data['id'])
         self.channel_id = int(data['channel_id'])
         self.data = data
@@ -151,6 +154,7 @@ class RawReactionActionEvent(_RawReprMixin):
                  'event_type', 'member')
 
     def __init__(self, data, emoji, event_type):
+        self._data = data
         self.message_id = int(data['message_id'])
         self.channel_id = int(data['channel_id'])
         self.user_id = int(data['user_id'])
@@ -179,6 +183,7 @@ class RawReactionClearEvent(_RawReprMixin):
     __slots__ = ('message_id', 'channel_id', 'guild_id')
 
     def __init__(self, data):
+        self._data = data
         self.message_id = int(data['message_id'])
         self.channel_id = int(data['channel_id'])
 
@@ -207,6 +212,7 @@ class RawReactionClearEmojiEvent(_RawReprMixin):
     __slots__ = ('message_id', 'channel_id', 'guild_id', 'emoji')
 
     def __init__(self, data, emoji):
+        self._data = data
         self.emoji = emoji
         self.message_id = int(data['message_id'])
         self.channel_id = int(data['channel_id'])
