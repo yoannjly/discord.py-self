@@ -118,6 +118,7 @@ class HTTPClient:
         self.user_agent = None
         self.super_properties = {}
         self.encoded_super_properties = None
+        self._started = False
 
     def __del__(self):
         session = self.__session
@@ -128,7 +129,10 @@ class HTTPClient:
         if self.__session.closed:
             self.__session = aiohttp.ClientSession(connector=self.connector)
 
-    async def startup_tasks(self):
+    async def startup(self):
+        if self._started:
+            return
+        self.__session = aiohttp.ClientSession(connector=self.connector)
         self.user_agent = ua = await utils._get_user_agent(self.__session)
         self.client_build_number = bn = await utils._get_build_number(self.__session)
         self.browser_version = bv = await utils._get_browser_version(self.__session)
@@ -149,6 +153,7 @@ class HTTPClient:
             'client_event_source': None
         }
         self.encoded_super_properties = b64encode(json.dumps(self.super_properties).encode()).decode('utf-8')
+        self._started = True
 
     async def ws_connect(self, url, *, compress=0, host=None):
         websocket_key = b64encode(bytes(getrandbits(8) for _ in range(16))).decode()  # Thank you Discord-S.C.U.M
@@ -172,7 +177,7 @@ class HTTPClient:
                 'Sec-WebSocket-Key': websocket_key,
                 'Sec-WebSocket-Version': '13',
                 'Upgrade': 'websocket',
-                'User-Agent': self.user_agent,
+                'User-Agent': self.user_agent
             },
             'compress': compress
         }
@@ -351,11 +356,10 @@ class HTTPClient:
     # Login management
 
     async def static_login(self, token):
-        self.__session = aiohttp.ClientSession(connector=self.connector)
         old_token = self.token
         self._token(token)
 
-        await self.startup_tasks()
+        await self.startup()
 
         params = {
             'with_analytics_token': 'true'
