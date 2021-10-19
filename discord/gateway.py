@@ -105,60 +105,58 @@ class GatewayRatelimiter:
                 log.warning('WebSocket is ratelimited, waiting %.2f seconds', delta)
                 await asyncio.sleep(delta)
 
-class KeepAliveHandler(threading.Thread):
-    def __init__(self, *args, **kwargs):
-        ws = kwargs.pop('ws', None)
-        interval = kwargs.pop('interval', None)
-        threading.Thread.__init__(self, *args, **kwargs)
+class KeepAliveHandler:  # Thank you enhanced-discord.py/Gnome
+    def __init__(self, *, ws, interval=None):
         self.ws = ws
-        self._main_thread_id = ws.thread_id
         self.interval = interval
-        self.daemon = True
-        self.msg = 'Keeping websocket alive with sequence %s.'
+        self.heartbeat_timeout = self.ws._max_heartbeat_timeout
+
+        self.msg = 'Keeping websocket alive.'
         self.block_msg = 'Heartbeat blocked for more than %s seconds.'
         self.behind_msg = 'Can\'t keep up, websocket is %.1fs behind.'
-        self._stop_ev = threading.Event()
-        self._last_ack = time.perf_counter()
+        self.not_responding_msg = 'Gateway has stopped responding. Closing and restarting.'
+        self.no_stop_msg = 'An error occurred while stopping the gateway. Ignoring.'
+
+        self._stop_ev = asyncio.Event()
         self._last_send = time.perf_counter()
         self._last_recv = time.perf_counter()
+        self._last_ack = time.perf_counter()
         self.latency = float('inf')
-        self.heartbeat_timeout = ws._max_heartbeat_timeout
 
-    def run(self):
-        while not self._stop_ev.wait(self.interval):
+    async def run(self):
+        while True:
+            try:
+                await asyncio.wait_for(self._stop_ev.wait(), timeout=self.interval)
+            except asyncio.TimeoutError:
+                pass
+            else:
+                return
+
             if self._last_recv + self.heartbeat_timeout < time.perf_counter():
-                log.warning("Bot has stopped responding to the gateway. Closing and restarting.")
-                coro = self.ws.close(4000)
-                f = asyncio.run_coroutine_threadsafe(coro, loop=self.ws.loop)
+                log.warning(self.not_responding_msg)
 
                 try:
-                    f.result()
+                    await self.ws.close(4000)
                 except Exception:
-                    log.exception('An error occurred while stopping the gateway. Ignoring.')
+                    log.exception(self.no_stop_msg)
                 finally:
                     self.stop()
                     return
 
             data = self.get_payload()
-            log.debug(self.msg, data['d'])
-            coro = self.ws.send_heartbeat(data)
-            f = asyncio.run_coroutine_threadsafe(coro, loop=self.ws.loop)
+            log.debug(self.msg)
             try:
-                # block until sending is complete
+                # Block until sending is complete
                 total = 0
                 while True:
                     try:
-                        f.result(10)
+                        await asyncio.wait_for(self.ws.send_heartbeat(data), timeout=10)
                         break
-                    except concurrent.futures.TimeoutError:
+                    except asyncio.TimeoutError:
                         total += 10
-                        try:
-                            frame = sys._current_frames()[self._main_thread_id]
-                        except KeyError:
-                            msg = self.block_msg
-                        else:
-                            stack = traceback.format_stack(frame)
-                            msg = '%s\nLoop thread traceback (most recent call last):\n%s' % (self.block_msg, ''.join(stack))
+
+                        stack = ''.join(traceback.format_stack())
+                        msg = f'{self.block_msg}\nLoop traceback (most recent call last):\n{stack}'
                         log.warning(msg, total)
 
             except Exception:
@@ -169,8 +167,11 @@ class KeepAliveHandler(threading.Thread):
     def get_payload(self):
         return {
             'op': self.ws.HEARTBEAT,
-            'd': self.ws.sequence
+            'd': self.ws.sequence,
         }
+
+    def start(self):
+        self.ws.loop.create_task(self.run())
 
     def stop(self):
         self._stop_ev.set()
@@ -189,9 +190,11 @@ class VoiceKeepAliveHandler(KeepAliveHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.recent_ack_latencies = deque(maxlen=20)
-        self.msg = 'Keeping voice websocket alive with timestamp %s.'
+        self.msg = 'Keeping voice websocket alive.'
         self.block_msg = 'Voice heartbeat blocked for more than %s seconds'
         self.behind_msg = 'High socket latency, heartbeat is %.1fs behind'
+        self.not_responding_msg = 'Voice gateway has stopped responding. Closing and restarting.'
+        self.no_stop_msg = 'An error occurred while stopping the voice gateway. Ignoring.'
 
     def get_payload(self):
         return {
@@ -205,6 +208,8 @@ class VoiceKeepAliveHandler(KeepAliveHandler):
         self._last_recv = ack_time
         self.latency = ack_time - self._last_send
         self.recent_ack_latencies.append(self.latency)
+        if self.latency > 10:
+            log.warning(self.behind_msg, self.latency)
 
 class DiscordWebSocket:
     """Implements a WebSocket for Discord's gateway v6.
