@@ -459,6 +459,7 @@ class UserFlags(Enum):
     bug_hunter_level_2         = 16384
     verified_bot               = 65536
     verified_bot_developer     = 131072
+    spammer                    = 1048576
 
 class ActivityType(Enum):
     unknown   = -1
@@ -507,8 +508,8 @@ class ReportType(Enum):
     self_harm       = 4
     nsfw_content    = 5
 
-    def __str__(self):
-        return str(self.value)
+    def __int__(self):
+        return self.value
 
 class RelationshipAction(Enum):
     send_friend_request    = 'request'

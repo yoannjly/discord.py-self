@@ -348,6 +348,11 @@ class PublicUserFlags(BaseFlags):
         """
         return UserFlags.verified_bot_developer.value
 
+    @flag_value
+    def spammer(self):
+        """:class:`bool`: Returns ``True`` if the user is banned and marked as a spammer."""
+        return UserFlags.spammer.value
+
     def all(self):
         """List[:class:`UserFlags`]: Returns all public flags the user has."""
         return [public_flag for public_flag in UserFlags if self._has_flag(public_flag.value)]
