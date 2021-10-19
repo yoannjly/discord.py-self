@@ -26,7 +26,7 @@ DEALINGS IN THE SOFTWARE.
 
 import array
 import asyncio
-import collections.abc
+import collections; import collections.abc
 import unicodedata
 from base64 import b64encode
 from bisect import bisect_left
@@ -598,6 +598,28 @@ class ExpiringQueue(asyncio.Queue):  # Inspired from https://github.com/NoahCard
     def to_list(self):
         return list(self._queue)
 
+class ExpiringString(collections.UserString):
+    def __init__(self, data, timeout):
+        super().__init__(data)
+        self._timer = timer = Timer(timeout, self._destruct)
+        timer.start()
+
+    def _update(self, data, timeout):
+        try:
+            self._timer.cancel()
+        except:
+            pass
+        self.data = data
+        self._timer = timer = Timer(timeout, self._destruct)
+        timer.start()
+
+    def _destruct(self):
+        self.data = ''
+
+    def destroy(self):
+        self._destruct()
+        self._timer.cancel()
+
 class Browser:  # Inspired from https://github.com/NoahCardoza/CaptchaHarvester
     def __init__(self, browser=None):
         if isinstance(browser, (BrowserEnum, type(None))):
@@ -728,7 +750,7 @@ async def _get_build_number(session): # Thank you Discord-S.C.U.M
 async def _get_user_agent(session):
     """Fetches the latest Windows 10/Chrome user-agent."""
     try:
-        request = await session.request('GET', 'https://jnrbsn.github.io/user-agents/user-agents.json', timeout=10)
+        request = await session.request('GET', 'https://jnrbsn.github.io/user-agents/user-agents.json', timeout=7)
         response = json.loads(await request.text())
         return response[0]
     except:
@@ -738,7 +760,7 @@ async def _get_user_agent(session):
 async def _get_browser_version(session):
     """Fetches the latest Windows 10/Chrome version."""
     try:
-        request = await session.request('GET', 'https://omahaproxy.appspot.com/all.json', timeout=10)
+        request = await session.request('GET', 'https://omahaproxy.appspot.com/all.json', timeout=7)
         response = json.loads(await request.text())
         if response[0]['versions'][4]['channel'] == 'stable':
             return response[0]['versions'][4]['version']
