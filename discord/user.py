@@ -40,8 +40,6 @@ from .utils import (_bytes_to_base64_data, cached_slot_property, parse_time,
 
 from datetime import datetime
 
-from datetime import datetime
-
 class Note:
     """Represents a Discord note."""
     __slots__ = ('_state', '_note', '_user_id', '_user')
@@ -608,6 +606,7 @@ class ClientUser(BaseUser):
         super().__init__(state=state, data=data)
         self._relationships = {}
         self.note = Note(state, self.id, user=self)
+        self.settings = None
 
     def __repr__(self):
         return '<ClientUser id={0.id} name={0.name!r} discriminator={0.discriminator!r}' \
