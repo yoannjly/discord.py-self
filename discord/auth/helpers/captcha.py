@@ -37,6 +37,12 @@ try:
 except ImportError:
     has_flask = False
 
+try:
+    import cryptography
+    has_crypto = True
+except ImportError:
+    has_crypto = False
+
 class _Harvester(Flask):  # Inspired from https://github.com/NoahCardoza/CaptchaHarvester
     def __init__(self, domain='discord.com', sitekey='f5561ba9-8f1e-40ca-9b5b-a0b3f719ef34', *, host='127.0.0.1', port=5000, log=False):
         super().__init__(__name__, static_url_path='/')
@@ -189,7 +195,9 @@ class CaptchaSolver(CaptchaHandler):
     def __init__(self, browser=None, domain='discord.com', sitekey='f5561ba9-8f1e-40ca-9b5b-a0b3f719ef34',
                  *, host='127.0.0.1', port=5000, log=False):
         if not has_flask:
-            raise RuntimeError("Flask library needed in order to use this handler")
+            raise RuntimeError('Flask library needed in order to use this handler')
+        if not has_crypto:
+            raise RuntimeError('Cryptography library needed in order to use this handler')
 
         self.domain = domain
         self.sitekey = sitekey

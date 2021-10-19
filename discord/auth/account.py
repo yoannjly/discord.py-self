@@ -32,11 +32,11 @@ import random
 import tempfile
 
 from discord.errors import AuthFailure, ClientException, InvalidArgument
-from discord.user import BaseUser as ClientUser # Temporary workaround until I make a custom class...
 from discord import utils
 
 from .http import AuthClient
-#from .user import ClientUser
+from .user import ClientUser
+from .remote_auth import RemoteAuthClient
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class Account:
         self.email = data.get('email')
         self.phone = data.get('phone')
         self.password = password
-        self.user = ClientUser(state=None, data=data)
+        self.user = ClientUser(self.http, data)
 
     def _generate_dob(self):
         min = datetime.date(1970, 1, 1)
@@ -114,12 +114,16 @@ class Account:
             pass
 
     async def _update_self(self):
-        data = await self.http.get_me()
+        data = await self.http.get_profile()
         self._ready(self.token, data, password=self.password)
 
     @property
     def authenticated(self):
         return self.token is not None
+
+    @utils.cached_slot_property('_remote_auth_client')
+    def remote_auth(self):
+        return RemoteAuthClient(self, loop=self.loop)
 
     async def register(self, *args, **kwargs):
         self._closed = False
@@ -224,7 +228,7 @@ class Account:
         if email != self.email and password is None:
             raise TypeError('verify_email() missing 1 required keyword-only argument: \'password\'')
         if email != self.email:
-            await http.edit_me(email=email, password=password)
+            await http.edit_profile(email=email, password=password)
 
         #token = None
         #for _ in range(3):

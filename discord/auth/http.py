@@ -271,7 +271,7 @@ class AuthClient:
     async def static_login(self, token):
         self.token = token
         try:
-            data = await self.get_me()
+            data = await self.get_profile()
         except HTTPException as exc:
             if exc.response.status == 401:
                 raise AuthFailure('Improper token has been passed.') from exc
@@ -279,15 +279,15 @@ class AuthClient:
         else:
             return data
 
-    def get_me(self):
+    def get_profile(self):
         params = {
             'with_analytics_token': 'true'
         }
         return self.request('GET', '/users/@me', auth=True,
                             referer='https://discord.com/channels/@me', params=params)
 
-    def edit_me(self, **fields):
-        return self.request('PATCH', '/users/@me', auth=True, json=fields,
+    def edit_profile(self, **payload):
+        return self.request('PATCH', '/users/@me', auth=True, json=payload,
                             referer='https://discord.com/channels/@me')
 
     def get_invite(self, invite_id):

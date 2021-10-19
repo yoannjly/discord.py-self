@@ -9,4 +9,5 @@ A helper module to wrap the auth APIs.
 """
 
 from .account import Account
+from .remote_auth import RemoteAuthClient
 from .helpers import *
