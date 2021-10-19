@@ -1166,7 +1166,7 @@ class Message(Hashable):
 
         Parameters
         -----------
-        reason :class:`ReportType`
+        reason: :class:`ReportType`
             The reason to report the message for.
 
         Raises
@@ -1181,7 +1181,7 @@ class Message(Hashable):
         """
         reason = try_enum(ReportType, reason)
         guild_id = getattr(self.guild, 'id', None)
-        data = await self._state.http.report(guild_id, self.channel.id, self.id, str(reason))
+        data = await self._state.http.report(guild_id, self.channel.id, self.id, int(reason))
         return int(data['id'])
 
     async def pin(self):

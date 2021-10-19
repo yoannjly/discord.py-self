@@ -53,6 +53,7 @@ from .backoff import ExponentialBackoff
 from .webhook import Webhook
 from .iterators import GuildIterator
 from .appinfo import AppInfo
+from .auth import RemoteAuthClient
 
 log = logging.getLogger(__name__)
 
@@ -292,6 +293,10 @@ class Client:
         These are usually :class:`.VoiceClient` instances.
         """
         return self._connection.voice_clients
+
+    @utils.cached_property
+    def remote_auth(self):
+        return RemoteAuthClient(self, loop=self.loop)
 
     def is_ready(self):
         """:class:`bool`: Specifies if the client's internal cache is ready for use."""
