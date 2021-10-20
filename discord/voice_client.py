@@ -354,7 +354,7 @@ class VoiceClient(VoiceProtocol):
                 break
             except (ConnectionClosed, asyncio.TimeoutError):
                 if reconnect:
-                    log.exception('Failed to connect to voice... Retrying...')
+                    log.exception('Failed to connect to voice. Retrying...')
                     await asyncio.sleep(1 + i * 2.0)
                     await self.voice_disconnect()
                     continue

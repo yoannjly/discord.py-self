@@ -215,30 +215,38 @@ class RemoteAuthClient:
             try:
                 await self.ws.poll_event()
             except ConnectionClosed as exc:
-                print('CLOSED')
-                break
                 """Codes:
+                -1   = Internal
+                1000 = Finished (accepted/denied)
                 4001 = Handshake failure
-                4003 = Timeout
-                1000 = Accepted/denied
+                4003 = Timeout/QR expired
                 """
-                
-                #if exc.code == -1:  # Internal signal
+                print('CLOSED')
 
-                #if not reconnect:
-                    #await self.disconnect()
-                    #raise
+                if exc.code == 1000:
+                    log.info('Remote auth successful. Gateway disconncted.')
+                    return
+                elif exc.code == 4001:
+                    raise RuntimeError('Please open an issue with this title: [RA] Handshake failure')
 
-                #retry = backoff.delay()
-                #log.exception('Disconnected from voice... Reconnecting in %.2fs.', retry)
-                #await asyncio.sleep(retry)
-                #await self.voice_disconnect()
-                #try:
-                    #await self.connect(reconnect=reconnect)
-                #except asyncio.TimeoutError:
-                    #at this point we've retried 5 times... let's continue the loop.
-                    #log.warning('Could not connect to voice... Retrying...')
-                    #continue
+                if not reconnect:
+                    await self.disconnect()
+                    raise
+
+                if exc.code == 4003:
+                    log.info('Remote auth gateway timed out. Reconnecting...')
+                else:
+                    retry = backoff.delay()
+                    log.info(f'Remote auth gateway disconnected with code {exc.code}. Reconnecting in {retry}s.')
+                    await asyncio.sleep(retry)
+
+                await self.disconnect()
+
+                try:
+                    await self.connect(reconnect=reconnect)
+                except:
+                    log.warning('Could not connect to the remote auth gateway. Retrying...')
+                    raise
 
     async def connect(self, *, reconnect=False):
         self._reset()
@@ -250,6 +258,14 @@ class RemoteAuthClient:
 
         if not self._runner:
             self._runner = self.loop.create_task(self.poll_ws(reconnect))
+
+    async def disconnect(self, *, force=False):
+        if self.ws:
+            try:
+                await self.ws.close()
+            finally:
+                self.url.destroy()
+                self._reset()
 
     async def wait_until_ready(self):
         if not self._ready:
@@ -322,6 +338,7 @@ class RemoteAuthClient:
             await self._client.login(token)
 
     async def on_cancel(self, *_):
+        self.url.destroy()
         self._last_status = False
         self._finished.set()
         self._reset(False)

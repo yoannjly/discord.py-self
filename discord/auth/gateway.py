@@ -41,10 +41,10 @@ __all__ = ('DiscordAuthWebSocket',)
 class KeepAliveHandler(_KeepAliveHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.msg = 'Keeping auth websocket alive.'
-        self.block_msg = 'Auth heartbeat blocked for more than %s seconds'
-        self.behind_msg = 'Can\'t keep up, auth websocket is %.1fs behind.'
-        self.not_responding_msg = 'Auth gateway has stopped responding. Closing and restarting.'
+        self.msg = 'Keeping remote auth websocket alive.'
+        self.block_msg = 'Remote auth heartbeat blocked for more than %s seconds'
+        self.behind_msg = 'Can\'t keep up, remote auth websocket is %.1fs behind.'
+        self.not_responding_msg = 'Remote auth gateway has stopped responding. Closing and restarting.'
         self.no_stop_msg = 'An error occurred while stopping the auth gateway. Ignoring.'
 
     def get_payload(self):
@@ -80,7 +80,6 @@ class DiscordAuthWebSocket:
         socket = await http.ws_connect(gateway, host='remote-auth-gateway.discord.gg')
         ws = cls(socket, loop=client.loop)
         ws.gateway = gateway
-        ws._connection = client
         ws._parsers = client._parsers
         ws._max_heartbeat_timeout = 60.0
 
@@ -99,7 +98,7 @@ class DiscordAuthWebSocket:
             'encoded_public_key': key
         }
         await self.send_as_json(payload)
-        log.info('Auth gateway has sent the INIT payload.')
+        log.info('Remote auth gateway has sent the INIT payload.')
 
     async def nonce_proof(self, nonce):
         payload = {
@@ -107,7 +106,7 @@ class DiscordAuthWebSocket:
             'proof': nonce
         }
         await self.send_as_json(payload)
-        log.info('Auth gateway has sent the NONCE_PROOF payload.')
+        log.info('Remote auth gateway has sent the NONCE_PROOF payload.')
 
     async def _call_handler(self, op, data):
         try:
@@ -118,7 +117,7 @@ class DiscordAuthWebSocket:
             await func(data)
 
     async def received_message(self, msg):
-        log.debug('Auth websocket: %s.', msg)
+        log.debug('Remote auth received: %s.', msg)
         op = msg.pop('op')
 
         if self._keep_alive:
@@ -143,17 +142,18 @@ class DiscordAuthWebSocket:
             if msg.type is aiohttp.WSMsgType.TEXT:
                 await self.received_message(json.loads(msg.data))
             elif msg.type is aiohttp.WSMsgType.ERROR:
-                log.debug('Auth received %s.', msg)
+                log.debug('Remote auth received %s.', msg)
                 raise msg.data
             elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.CLOSING):
-                log.debug('Auth received %s.', msg)
+                log.debug('Remote auth received %s.', msg)
                 raise WebSocketClosure()
         except (asyncio.TimeoutError, WebSocketClosure) as e:
             self._cleanup()
 
             if isinstance(e, asyncio.TimeoutError):
-                log.info('Auth gateway timed out. Attempting a reconnect.')
+                log.info('Remote auth gateway timed out. Signalling to reconnect.')
                 code = -1
+
             code = self._close_code or self.ws.close_code
             raise ConnectionClosed(self.ws, code=code)
 
