@@ -277,13 +277,7 @@ class Client:
 
     @property
     def private_channels(self):
-        """List[:class:`.abc.PrivateChannel`]: The private channels that the connected client is participating on.
-
-        .. note::
-
-            This returns only up to 128 most recent private channels due to an internal working
-            on how Discord deals with private channels.
-        """
+        """List[:class:`.abc.PrivateChannel`]: The private channels that the connected client is participating on."""
         return self._connection.private_channels
 
     @property
@@ -533,20 +527,19 @@ class Client:
         if self._closed:
             return
 
-        await self.http.close()
         self._closed = True
 
         for voice in self.voice_clients:
             try:
-                await voice.disconnect()
+                await voice.disconnect(force=True)
             except Exception:
                 # if an error happens during disconnects, disregard it.
                 pass
 
         if self.ws is not None and self.ws.open:
-            self.ws.socket._writer.transport.close()
             await self.ws.close(code=1000)
 
+        await self.http.close()
         self._ready.clear()
 
     def clear(self):
@@ -644,6 +637,11 @@ class Client:
     def is_closed(self):
         """:class:`bool`: Indicates if the websocket connection is closed."""
         return self._closed
+
+    @property
+    def voice_client(self):
+        """Optional[:class:`VoiceProtocol`]: Returns the :class:`VoiceProtocol` associated with private calls, if any."""
+        return self._connection._get_voice_client(self.user.id)
 
     @property
     def activity(self):
@@ -985,6 +983,35 @@ class Client:
 
             me.status = status_enum
 
+    async def change_voice_state(self, *, channel, self_mute=False, self_deaf=False, self_video=None, preferred_region=''):
+        """|coro|
+
+        Changes client's voice state (meant for private channels).
+
+        .. versionadded:: 1.10
+
+        Parameters
+        -----------
+        channel: Optional[:class:`VoiceChannel`]
+            Channel the client wants to join. Use ``None`` to disconnect.
+        self_mute: :class:`bool`
+            Indicates if the client should be self-muted.
+        self_deaf: :class:`bool`
+            Indicates if the client should be self-deafened.
+        self_video :class:`bool`
+            Indicates if the client is using video. Untested & unconfirmed
+            (do not use).
+        """
+
+        state = self._connection
+        ws = self.ws
+        channel_id = channel.id if channel else None
+
+        if channel_id and preferred_region == '':
+            preferred_region = state.preferred_region
+
+        await ws.voice_state(None, channel_id, self_mute, self_deaf, self_video, preferred_region=str(preferred_region))
+
     # Guild stuff
 
     def fetch_guilds(self):
@@ -1158,6 +1185,8 @@ class Client:
             raise InvalidArgument('Tried to join a guild you\'re already in.')
 
         return Guild(data=data['guild'], state=self._connection)
+
+    accept_invite = join_guild
 
     async def leave_guild(self, guild_id):
         """|coro|
