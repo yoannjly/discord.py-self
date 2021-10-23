@@ -44,7 +44,7 @@ from .message import Message
 from .relationship import Relationship
 from .channel import *
 from .raw_models import *
-from .member import Member
+from .member import Member, VoiceState
 from .role import Role
 from .enums import ChannelType, try_enum, Status, UnavailableGuildType, RequiredActionType, VoiceRegion
 from . import utils
@@ -178,12 +178,12 @@ class ConnectionState:
         self._unavailable_guilds = {}
         self._queued_guilds = {}
         self._voice_clients = {}
+        self._voice_states = {}
 
-        # LRU of max size 128
         self._private_channels = OrderedDict()
-        # extra dict to look up private channels by user id
         self._private_channels_by_user = {}
         self._messages = self.max_messages and deque(maxlen=self.max_messages)
+        self._call_message_cache = {}
 
     def process_chunk_requests(self, guild_id, nonce, members, complete):
         removed = []
@@ -221,6 +221,32 @@ class ConnectionState:
     @property
     def voice_clients(self):
         return list(self._voice_clients.values())
+
+    def _update_voice_state(self, data):
+        user_id = int(data['user_id'])
+        channel_id = utils._get_as_snowflake(data, 'channel_id')
+        user = self.get_user(user_id)
+        channel = self._get_private_channel(channel_id)
+
+        try:
+            # check if we should remove the voice state from cache
+            if channel is None:
+                after = self._voice_states.pop(user_id)
+            else:
+                after = self._voice_states[user_id]
+
+            before = copy.copy(after)
+            after._update(data, channel)
+        except KeyError:
+            # if we're here then we're getting added into the cache
+            after = VoiceState(data=data, channel=channel)
+            before = VoiceState(data=data, channel=None)
+            self._voice_states[user_id] = after
+
+        return user, before, after
+
+    def _voice_state_for(self, user_id):
+        return self._voice_states.get(user_id)
 
     def _get_voice_client(self, guild_id):
         return self._voice_clients.get(guild_id)
@@ -299,9 +325,8 @@ class ConnectionState:
         try:
             value = self._private_channels[channel_id]
         except KeyError:
-            return None
+            return
         else:
-            self._private_channels.move_to_end(channel_id)
             return value
 
     def _get_private_channel_by_user(self, user_id):
@@ -504,6 +529,8 @@ class ConnectionState:
         self.dispatch('message', message)
         if self._messages is not None:
             self._messages.append(message)
+        if message.call is not None:
+            self._call_message_cache[message.id] = message
         if channel and channel.__class__ is TextChannel:
             channel.last_message_id = message.id
 
@@ -1116,18 +1143,38 @@ class ConnectionState:
         else:
             log.debug('WEBHOOKS_UPDATE referencing an unknown channel ID: %s. Discarding.', data['channel_id'])
 
+    def parse_call_create(self, data):
+        channel = self._get_private_channel(int(data['channel_id']))
+        message = self._call_message_cache.pop((int(data['message_id'])), None)
+        call = channel._add_call(state=self, message=message, channel=channel, **data)
+        self._calls[channel.id] = call
+        self.dispatch('call_create', call)
+
+    def parse_call_update(self, data):
+        call = self._calls.get(int(data['channel_id']))
+        call._update(**data)
+        self.dispatch('call_update', call)
+
+    def parse_call_delete(self, data):
+        call = self._calls.pop(int(data['channel_id']), None)
+        if call is not None:
+            call._deleteup()
+        self.dispatch('call_delete', call)
+
     def parse_voice_state_update(self, data):
         guild = self._get_guild(utils._get_as_snowflake(data, 'guild_id'))
         channel_id = utils._get_as_snowflake(data, 'channel_id')
+        session_id = data['session_id']
         flags = self.member_cache_flags
         self_id = self.user.id
-        if guild is not None:
-            if int(data['user_id']) == self_id:
-                voice = self._get_voice_client(guild.id)
-                if voice is not None:
-                    coro = voice.on_voice_state_update(data)
-                    asyncio.ensure_future(logging_coroutine(coro, info='Voice Protocol voice state update handler'))
 
+        if int(data['user_id']) == self_id:
+            voice = self._get_voice_client(getattr(guild, 'id', self_id))
+            if voice is not None:
+                coro = voice.on_voice_state_update(data)
+                asyncio.ensure_future(logging_coroutine(coro, info='Voice Protocol voice state update handler'))
+
+        if guild is not None:
             member, before, after = guild._update_voice_state(data, channel_id)
             if member is not None:
                 if flags.voice:
@@ -1141,16 +1188,13 @@ class ConnectionState:
             else:
                 log.debug('VOICE_STATE_UPDATE referencing an unknown member ID: %s. Discarding.', data['user_id'])
         else:
-            # We're at calls
-            call = self._calls.get(channel_id)
-            if call is not None:
-                call._update_voice_state(data)
+            user, before, after = self._update_voice_state(data)
+            self.dispatch('voice_state_update', user, before, after)
 
     def parse_voice_server_update(self, data):
-        try:
-            key_id = int(data['guild_id'])
-        except KeyError:
-            key_id = int(data['channel_id'])
+        key_id = utils._get_as_snowflake(data, 'guild_id')
+        if key_id is None:
+            key_id = self.user.id
 
         vc = self._get_voice_client(key_id)
         if vc is not None:

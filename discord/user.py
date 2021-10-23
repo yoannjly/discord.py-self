@@ -395,6 +395,11 @@ class BaseUser(_BaseUser):
         }
 
     @property
+    def voice(self):
+        """Optional[:class:`VoiceState`]: Returns the user's current voice state."""
+        return self._state._voice_state_for(self.id)
+
+    @property
     def public_flags(self):
         """:class:`PublicUserFlags`: The publicly available flags the user has."""
         return PublicUserFlags._from_value(self._public_flags)
@@ -1045,7 +1050,7 @@ class ClientUser(BaseUser):
         return await self._state.http.delete_account(password)
 
 
-class User(BaseUser, discord.abc.Messageable):
+class User(BaseUser, discord.abc.Connectable, discord.abc.Messageable):
     """Represents a Discord user.
 
     .. container:: operations
@@ -1087,6 +1092,12 @@ class User(BaseUser, discord.abc.Messageable):
     def __repr__(self):
         return '<User id={0.id} name={0.name!r} discriminator={0.discriminator!r} bot={0.bot}>'.format(self)
 
+    def _get_voice_client_key(self):
+        return self._state.user.id, 'self_id'
+
+    def _get_voice_state_pair(self):
+        return self._state.user.id, self.dm_channel.id
+
     async def _get_channel(self):
         ch = await self.create_dm()
         return ch
@@ -1099,6 +1110,10 @@ class User(BaseUser, discord.abc.Messageable):
         :meth:`create_dm` coroutine function.
         """
         return self._state._get_private_channel_by_user(self.id)
+
+    @property
+    def call(self):
+        return getattr(self.dm_channel, 'call', None)
 
     async def create_dm(self):
         """|coro|
@@ -1125,6 +1140,15 @@ class User(BaseUser, discord.abc.Messageable):
     def relationship(self):
         """Optional[:class:`Relationship`]: Returns the :class:`Relationship` with this user if applicable, ``None`` otherwise."""
         return self._state.user.get_relationship(self.id)
+
+    async def connect(self, *, ring=True, **kwargs):
+        channel = await self._get_channel()
+        call = self.call
+        if call is not None:
+            ring = False
+        await super().connect(_channel=channel, **kwargs)
+        if ring:
+            await channel._initial_ring()
 
     async def mutual_friends(self):
         """|coro|

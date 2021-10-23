@@ -123,7 +123,10 @@ class HTTPClient:
     def __del__(self):
         session = self.__session
         if session:
-            session.connector._close()
+            try:
+                session.connector._close()
+            except AttributeError:
+                pass
 
     def recreate(self):
         if self.__session.closed:
@@ -212,11 +215,16 @@ class HTTPClient:
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Site': 'same-origin',
             'User-Agent': self.user_agent,
+            'X-Debug-Options': 'bugReporterEnabled',
             'X-Super-Properties': self.encoded_super_properties
         }
 
         if self.token is not None:
             headers['Authorization'] = self.token
+
+        reason = kwargs.pop('reason', None)
+        if reason:
+            headers['X-Audit-Log-Reason'] = _uriquote(reason)
 
         # header modification
         if 'json' in kwargs:
@@ -604,23 +612,15 @@ class HTTPClient:
     # Member management
 
     def kick(self, guild_id, user_id, reason=None):
-        r = Route('DELETE', '/guilds/{guild_id}/members/{user_id}', guild_id=guild_id, user_id=user_id)
-        if reason:
-            # thanks aiohttp
-            r.url = '{0.url}?reason={1}'.format(r, _uriquote(reason))
-
-        return self.request(r)
+        return self.request(Route('DELETE', '/guilds/{guild_id}/members/{user_id}', guild_id=guild_id, user_id=user_id), reason=reason)
 
     def ban(self, guild_id, user_id, delete_message_days=1, reason=None):
         r = Route('PUT', '/guilds/{guild_id}/bans/{user_id}', guild_id=guild_id, user_id=user_id)
-        params = {
-            'delete_message_days': delete_message_days,
+        payload = {
+            'delete_message_days': str(delete_message_days),
         }
-        if reason:
-            # thanks aiohttp
-            r.url = '{0.url}?reason={1}'.format(r, _uriquote(reason))
 
-        return self.request(r, params=params)
+        return self.request(r, json=payload, reason=reason)
 
     def unban(self, guild_id, user_id):
         r = Route('DELETE', '/guilds/{guild_id}/bans/{user_id}', guild_id=guild_id, user_id=user_id)
@@ -1036,12 +1036,23 @@ class HTTPClient:
     def move_member(self, user_id, guild_id, channel_id):
         return self.edit_member(guild_id=guild_id, user_id=user_id, channel_id=channel_id)
 
-    def change_voice_region_in_private_channel(self, channel_id, voice_region):
+    def ring(self, channel_id, *recipients):
+        payload = {
+            'recipients': recipients or None
+        }
+        return self.request(Route('POST', '/channels/{channel_id}/call/ring', channel_id=channel_id), json=payload)
+
+    def stop_ringing(self, channel_id, *recipients):
+        payload = {
+            'recipients': recipients
+        }
+        return self.request(Route('POST', '/channels/{channel_id}/call/stop-ringing', channel_id=channel_id), json=payload)
+
+    def change_call_voice_region(self, channel_id, voice_region):
         payload = {
             'region': voice_region
         }
-        r = Route('PATCH', '/channels/{channel_id}/call', channel_id=channel_id)
-        return self.request(r, json=payload)
+        return self.request(Route('PATCH', '/channels/{channel_id}/call', channel_id=channel_id), json=payload)
 
     # Relationship related
 
@@ -1203,7 +1214,7 @@ class HTTPClient:
     def get_team(self, team_id):
         return self.request(Route('GET', '/teams/{team_id}', team_id=team_id), super_properties_to_track=True)
 
-    def report(self, guild_id, channel_id, message_id, reason):
+    def mobile_report(self, guild_id, channel_id, message_id, reason):
         payload = {
             'guild_id': guild_id,
             'channel_id': channel_id,

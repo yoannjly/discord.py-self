@@ -261,7 +261,10 @@ class VoiceClient(VoiceProtocol):
                 await self.disconnect()
             else:
                 guild = self.guild
-                self.channel = channel_id and guild and guild.get_channel(int(channel_id))
+                if guild is not None:
+                    self.channel = channel_id and guild.get_channel(int(channel_id))
+                else:
+                    self.channel = channel_id and self._state._get_private_channel(int(channel_id))
         else:
             self._voice_state_complete.set()
 
@@ -271,7 +274,9 @@ class VoiceClient(VoiceProtocol):
             return
 
         self.token = data.get('token')
-        self.server_id = int(data['guild_id'])
+        self.server_id = server_id = utils._get_as_snowflake(data, 'guild_id')
+        if server_id is None:
+            self.server_id = utils._get_as_snowflake(data, 'channel_id')
         endpoint = data.get('endpoint')
 
         if endpoint is None or self.token is None:
@@ -298,11 +303,17 @@ class VoiceClient(VoiceProtocol):
         self._voice_server_complete.set()
 
     async def voice_connect(self):
-        await self.channel.guild.change_voice_state(channel=self.channel)
+        if self.guild:
+            await self.guild.change_voice_state(channel=self.channel)
+        else:
+            await self._state._get_client().change_voice_state(channel=self.channel, self_video=False)
 
     async def voice_disconnect(self):
-        log.info('The voice handshake is being terminated for Channel ID %s (Guild ID %s)', self.channel.id, self.guild.id)
-        await self.channel.guild.change_voice_state(channel=None)
+        log.info('The voice handshake is being terminated for Channel ID %s (Guild ID %s)', self.channel.id, getattr(self.guild, 'id', None))
+        if self.guild:
+            await self.guild.change_voice_state(channel=None)
+        else:
+            await self._state._get_client().change_voice_state(channel=None, self_video=False)
 
     def prepare_handshake(self):
         self._voice_state_complete.clear()
@@ -317,8 +328,8 @@ class VoiceClient(VoiceProtocol):
         self._voice_server_complete.clear()
         self._voice_state_complete.clear()
 
-    async def connect_websocket(self):
-        ws = await DiscordVoiceWebSocket.from_client(self)
+    async def connect_websocket(self, resume=False):
+        ws = await DiscordVoiceWebSocket.from_client(self, resume=resume)
         self._connected.clear()
         while ws.secret_key is None:
             await ws.poll_event()
@@ -359,6 +370,7 @@ class VoiceClient(VoiceProtocol):
                     await self.voice_disconnect()
                     continue
                 else:
+                    await self.disconnect(force=True)
                     raise
 
         if self._runner is None:
@@ -385,6 +397,20 @@ class VoiceClient(VoiceProtocol):
             return False
         else:
             return True
+
+    async def potential_resume(self):
+        # Attempt to stop the player thread from playing early
+        self._connected.clear()
+        self._potentially_reconnecting = True
+
+        try:
+            self.ws = await self.connect_websocket(resume=True)
+        except (ConnectionClosed, asyncio.TimeoutError):
+            return False
+        else:
+            return True
+        finally:
+            self._potentially_reconnecting = False
 
     @property
     def latency(self):
@@ -414,16 +440,21 @@ class VoiceClient(VoiceProtocol):
                 await self.ws.poll_event()
             except (ConnectionClosed, asyncio.TimeoutError) as exc:
                 if isinstance(exc, ConnectionClosed):
-                    # The following close codes are undocumented so I will document them here.
-                    # 1000 - normal closure (obviously)
-                    # 4014 - voice channel has been deleted.
-                    # 4015 - voice server has crashed
-                    if exc.code in (1000, 4015):
+                    if exc.code == 1000:  # Normal closure (obviously)
                         log.info('Disconnecting from voice normally, close code %d.', exc.code)
                         await self.disconnect()
                         break
+                    if exc.code == 4015:
+                        log.info('Disconnected from voice (close code %d)... potentially RESUMEing.', exc.code)
+                        successful = await self.potential_resume()
+                        if not successful:
+                            log.info('RESUME was unsuccessful, disconnecting from voice normally...')
+                            await self.disconnect()
+                            break
+                        else:
+                            continue
                     if exc.code == 4014:
-                        log.info('Disconnected from voice by force... potentially reconnecting.')
+                        log.info('Disconnected from voice by force (close code %d)... potentially reconnecting.', exc.code)
                         successful = await self.potential_reconnect()
                         if not successful:
                             log.info('Reconnect was unsuccessful, disconnecting from voice normally...')
@@ -440,7 +471,6 @@ class VoiceClient(VoiceProtocol):
                 log.exception('Disconnected from voice... Reconnecting in %.2fs.', retry)
                 self._connected.clear()
                 await asyncio.sleep(retry)
-                await self.voice_disconnect()
                 try:
                     await self.connect(reconnect=True, timeout=self.timeout)
                 except asyncio.TimeoutError:
@@ -477,9 +507,12 @@ class VoiceClient(VoiceProtocol):
         Parameters
         -----------
         channel: :class:`abc.Snowflake`
-            The channel to move to. Must be a voice channel.
+            The channel to move to. Must be a :class:`abc.Connectable`.
         """
-        await self.channel.guild.change_voice_state(channel=channel)
+        if self.guild:
+            await self.guild.change_voice_state(channel=channel)
+        else:
+            await self._state._get_client().change_voice_state(channel=channel, self_video=False)
 
     def is_connected(self):
         """Indicates if the voice client is connected to voice."""

@@ -48,8 +48,12 @@ class VoiceState:
     ------------
     deaf: :class:`bool`
         Indicates if the user is currently deafened by the guild.
+
+        Doesn't apply to private channels.
     mute: :class:`bool`
         Indicates if the user is currently muted by the guild.
+
+        Doesn't apply to private channels.
     self_mute: :class:`bool`
         Indicates if the user is currently muted by their own accord.
     self_deaf: :class:`bool`
@@ -79,9 +83,11 @@ class VoiceState:
 
     afk: :class:`bool`
         Indicates if the user is currently in the AFK channel in the guild.
-    channel: Optional[Union[:class:`VoiceChannel`, :class:`StageChannel`]]
-        The voice channel that the user is currently connected to. ``None`` if the user
-        is not currently in a voice channel.
+
+        Doesn't apply to private channels.
+    channel: Optional[:class:`Connectable`]
+        The vocal channel that the user is currently connected to. ``None`` if the user
+        is not currently in one.
     """
 
     __slots__ = ('session_id', 'deaf', 'mute', 'self_mute',

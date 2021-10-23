@@ -2361,7 +2361,7 @@ class Guild(Hashable):
         limit = min(100, limit or 5) if query else None
         return await self._state.query_members(self, query=query, limit=limit, user_ids=user_ids, presences=presences, cache=cache)
 
-    async def change_voice_state(self, *, channel, self_mute=False, self_deaf=False, self_video=None, self_stream=None, preferred_region=''):
+    async def change_voice_state(self, *, channel, self_mute=False, self_deaf=False, self_video=None, preferred_region=''):
         """|coro|
 
         Changes client's voice state in the guild.
@@ -2381,11 +2381,6 @@ class Guild(Hashable):
             (do not use).
 
             .. versionadded:: 1.9
-        self_stream :class:`bool`
-            Indicates if the client is sharing its screen via the Go Live
-            feature. Untested & unconfirmed (do not use).
-
-            .. versionadded:: 1.9
         """
 
         state = self._state
@@ -2395,7 +2390,7 @@ class Guild(Hashable):
         if channel_id and preferred_region == '':
             preferred_region = state.preferred_region
 
-        await ws.voice_state(self.id, channel_id, self_mute, self_deaf, self_video, self_stream, preferred_region=str(preferred_region))
+        await ws.voice_state(self.id, channel_id, self_mute, self_deaf, self_video, preferred_region=str(preferred_region))
 
     async def mute(self, *, duration=None):
         """|coro|

@@ -103,6 +103,8 @@ class User(metaclass=abc.ABCMeta):
         The avatar hash the user has.
     bot: :class:`bool`
         If the user is a bot account.
+    system: :class:`bool`
+        If the user is a system user (i.e. represents Discord officially).
     """
     __slots__ = ()
 
@@ -1226,7 +1228,7 @@ class Connectable(metaclass=abc.ABCMeta):
     def _get_voice_state_pair(self):
         raise NotImplementedError
 
-    async def connect(self, *, timeout=60.0, reconnect=True, cls=VoiceClient):
+    async def connect(self, *, timeout=60.0, reconnect=True, cls=VoiceClient, _channel=None):
         """|coro|
 
         Connects to voice and creates a :class:`VoiceClient` to establish
@@ -1263,10 +1265,10 @@ class Connectable(metaclass=abc.ABCMeta):
         state = self._state
 
         if state._get_voice_client(key_id):
-            raise ClientException('Already connected to a voice channel.')
+            raise ClientException('Already connected to voice.')
 
         client = state._get_client()
-        voice = cls(client, self)
+        voice = cls(client, _channel or self)
 
         if not isinstance(voice, VoiceProtocol):
             raise TypeError('Type must meet VoiceProtocol abstract base class.')
@@ -1278,7 +1280,7 @@ class Connectable(metaclass=abc.ABCMeta):
         except asyncio.TimeoutError:
             try:
                 await voice.disconnect(force=True)
-            except Exception:
+            except:
                 # we don't care if disconnect failed because connection failed
                 pass
             raise # re-raise

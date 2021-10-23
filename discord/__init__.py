@@ -21,6 +21,7 @@ __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 from collections import namedtuple
 import logging
 
+from . import utils, opus, abc, auth
 from .client import Client
 from .appinfo import AppInfo
 from .user import User, ClientUser, Profile
@@ -46,7 +47,6 @@ from .template import Template
 from .widget import Widget, WidgetMember, WidgetChannel
 from .object import Object
 from .reaction import Reaction
-from . import utils, opus, abc, auth
 from .enums import *
 from .embeds import Embed
 from .mentions import AllowedMentions

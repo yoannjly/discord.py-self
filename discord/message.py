@@ -1179,9 +1179,10 @@ class Message(Hashable):
         :class:`int`
             The resulting report ID.
         """
+
         reason = try_enum(ReportType, reason)
         guild_id = getattr(self.guild, 'id', None)
-        data = await self._state.http.report(guild_id, self.channel.id, self.id, int(reason))
+        data = await self._state.http.mobile_report(guild_id, self.channel.id, self.id, int(reason))
         return int(data['id'])
 
     async def pin(self):

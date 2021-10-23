@@ -567,7 +567,7 @@ class Client:
         reconnect = kwargs.pop('reconnect', True)
 
         if kwargs:
-            raise TypeError("unexpected keyword argument(s) %s" % list(kwargs.keys()))
+            raise TypeError('Unexpected keyword argument(s) %s' % list(kwargs.keys()))
 
         await self.login(*args)
         await self.connect(reconnect=reconnect)

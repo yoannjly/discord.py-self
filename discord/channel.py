@@ -27,6 +27,7 @@ DEALINGS IN THE SOFTWARE.
 import asyncio
 
 import discord.abc
+from .calls import PrivateCall, GroupCall
 from .permissions import Permissions
 from .enums import ChannelType, try_enum, VoiceRegion
 from .mixins import Hashable
@@ -1112,7 +1113,7 @@ class StoreChannel(discord.abc.GuildChannel, Hashable):
         """
         await self._edit(options)
 
-class DMChannel(discord.abc.Messageable, Hashable):
+class DMChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
     """Represents a Discord direct message channel.
 
     .. container:: operations
@@ -1151,14 +1152,31 @@ class DMChannel(discord.abc.Messageable, Hashable):
         self.me = me
         self.id = int(data['id'])
 
+    def _get_voice_client_key(self):
+        return self.me.id, 'self_id'
+
+    def _get_voice_state_pair(self):
+        return self.me.id, self.id
+
+    def _add_call(self, **kwargs):
+        return PrivateCall(**kwargs)
+
     async def _get_channel(self):
         return self
+
+    def _initial_ring(self):
+        return self._state.http.ring(self.id)
 
     def __str__(self):
         return 'Direct Message with %s' % self.recipient
 
     def __repr__(self):
         return '<DMChannel id={0.id} recipient={0.recipient!r}>'.format(self)
+
+    @property
+    def call(self):
+        """Optional[:class:`PrivateCall`]: The channel's currently active call."""
+        return self._state._calls.get(self.id)
 
     @property
     def type(self):
@@ -1200,6 +1218,14 @@ class DMChannel(discord.abc.Messageable, Hashable):
         base.manage_messages = False
         return base
 
+    async def connect(self, *, ring=True, **kwargs):
+        call = self.call
+        if call is not None:
+            ring = False
+        await super().connect(**kwargs)
+        if ring:
+            await self._initial_ring()
+
     def get_partial_message(self, message_id):
         """Creates a :class:`PartialMessage` from the message ID.
 
@@ -1222,24 +1248,7 @@ class DMChannel(discord.abc.Messageable, Hashable):
         from .message import PartialMessage
         return PartialMessage(channel=self, id=message_id)
 
-    async def change_region(self, region):
-        """|coro|
-
-        Changes the channel's voice region.
-        
-        Parameters
-        -----------
-        region: :class:`VoiceRegion`
-            A :class:`VoiceRegion` to change the voice region to.
-
-        Raises
-        -------
-        HTTPException
-            Failed to change the channel's voice region.
-        """
-        return await self._state.http.change_voice_region_in_private_channel(self.id, region.value)
-
-class GroupChannel(discord.abc.Messageable, Hashable):
+class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
     """Represents a Discord group channel.
 
     .. container:: operations
@@ -1284,6 +1293,12 @@ class GroupChannel(discord.abc.Messageable, Hashable):
         self.me = me
         self._update_group(data)
 
+    def _get_voice_client_key(self):
+        return self.me.id, 'self_id'
+
+    def _get_voice_state_pair(self):
+        return self.me.id, self.id
+
     def _update_group(self, data):
         owner_id = utils._get_as_snowflake(data, 'owner_id')
         self.icon = data.get('icon')
@@ -1299,8 +1314,14 @@ class GroupChannel(discord.abc.Messageable, Hashable):
         else:
             self.owner = utils.find(lambda u: u.id == owner_id, self.recipients)
 
+    def _add_call(self, **kwargs):
+        return GroupCall(**kwargs)
+
     async def _get_channel(self):
         return self
+
+    def _initial_ring(self):
+        return self._state.http.ring(self.id)
 
     def __str__(self):
         if self.name:
@@ -1313,6 +1334,11 @@ class GroupChannel(discord.abc.Messageable, Hashable):
 
     def __repr__(self):
         return '<GroupChannel id={0.id} name={0.name!r}>'.format(self)
+
+    @property
+    def call(self):
+        """Optional[:class:`PrivateCall`]: The channel's currently active call."""
+        return self._state._calls.get(self.id)
 
     @property
     def type(self):
@@ -1395,6 +1421,14 @@ class GroupChannel(discord.abc.Messageable, Hashable):
             base.kick_members = True
 
         return base
+
+    async def connect(self, *, ring=True, **kwargs):
+        call = self.call
+        if call is not None:
+            ring = False
+        if ring:
+            await self._initial_ring()
+        await super().connect(**kwargs)
 
     async def add_recipients(self, *recipients):
         r"""|coro|
@@ -1490,24 +1524,6 @@ class GroupChannel(discord.abc.Messageable, Hashable):
         """
 
         await self._state.http.leave_group(self.id)
-
-    async def change_region(self, region):
-        """|coro|
-
-        Changes the channel's voice region.
-        
-        Parameters
-        -----------
-        region: :class:`VoiceRegion`
-            A :class:`VoiceRegion` to change the voice region to.
-
-        Raises
-        -------
-        HTTPException
-            Failed to change the channel's voice region.
-        """
-        return await self._state.http.change_voice_region_in_private_channel(self.id, region.value)
-
 
 def _channel_factory(channel_type):
     value = try_enum(ChannelType, channel_type)

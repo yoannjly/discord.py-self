@@ -105,7 +105,7 @@ class GatewayRatelimiter:
                 log.warning('WebSocket is ratelimited, waiting %.2f seconds', delta)
                 await asyncio.sleep(delta)
 
-class KeepAliveHandler:  # Thank you enhanced-discord.py/Gnome
+class KeepAliveHandler:  # Thank you enhanced-discord.py/Gnome for converting to asyncio.Task
     def __init__(self, *, ws, interval=None):
         self.ws = ws
         self.interval = interval
@@ -455,7 +455,7 @@ class DiscordWebSocket:
             if op == self.HELLO:
                 interval = data['heartbeat_interval'] / 1000.0
                 self._keep_alive = KeepAliveHandler(ws=self, interval=interval)
-                # send a heartbeat immediately
+                # Send a heartbeat immediately
                 await self.send_as_json(self._keep_alive.get_payload())
                 self._keep_alive.start()
                 return
@@ -496,7 +496,7 @@ class DiscordWebSocket:
             log.info('Parsing event %s.', event)
             func(data)
 
-        # remove the dispatched listeners
+        # Remove the dispatched listeners
         removed = []
         for index, entry in enumerate(self._dispatch_listeners):
             if entry.event != event:
@@ -653,7 +653,7 @@ class DiscordWebSocket:
 
         await self.send_as_json(payload)
 
-    async def voice_state(self, guild_id=None, channel_id=None, self_mute=False, self_deaf=False, self_video=None, self_stream=None, *, preferred_region=None):
+    async def voice_state(self, guild_id=None, channel_id=None, self_mute=False, self_deaf=False, self_video=None, *, preferred_region=None):
         payload = {
             'op': self.VOICE_STATE,
             'd': {
@@ -666,8 +666,6 @@ class DiscordWebSocket:
 
         if self_video is not None:
             payload['d']['self_video'] = self_video
-        if self_stream is not None:
-            payload['d']['self_stream'] = self_stream
         if preferred_region is not None:
             payload['d']['preferred_region'] = preferred_region
 
@@ -770,7 +768,7 @@ class DiscordVoiceWebSocket:
                 'server_id': str(state.server_id),
                 'user_id': str(state.user.id),
                 'session_id': state.session_id,
-                'token': state.token
+                'token': state.token,
             }
         }
         await self.send_as_json(payload)
@@ -831,7 +829,7 @@ class DiscordVoiceWebSocket:
         await self.send_as_json(payload)
 
     async def received_message(self, msg):
-        log.debug('Voice websocket frame received: %s', msg)
+        log.debug('Voice websocket frame received: %s.', msg)
         op = msg['op']
         data = msg.get('d')
 
@@ -841,6 +839,7 @@ class DiscordVoiceWebSocket:
             self._keep_alive.ack()
         elif op == self.RESUMED:
             log.info('Voice RESUME succeeded.')
+            self.secret_key = self._connection.secret_key
         elif op == self.SESSION_DESCRIPTION:
             self._connection.mode = data['mode']
             await self.load_secret_key(data)
@@ -861,7 +860,7 @@ class DiscordVoiceWebSocket:
         struct.pack_into('>I', packet, 4, state.ssrc)
         state.socket.sendto(packet, (state.endpoint_ip, state.voice_port))
         recv = await self.loop.sock_recv(state.socket, 70)
-        log.debug('received packet in initial_connection: %s', recv)
+        log.debug('received packet in initial_connection: %s.', recv)
 
         # the ip is ascii starting at the 4th byte and ending at the first null
         ip_start = 4
@@ -869,15 +868,15 @@ class DiscordVoiceWebSocket:
         state.ip = recv[ip_start:ip_end].decode('ascii')
 
         state.port = struct.unpack_from('>H', recv, len(recv) - 2)[0]
-        log.debug('detected ip: %s port: %s', state.ip, state.port)
+        log.debug('Detected ip: %s port: %s.', state.ip, state.port)
 
         # there *should* always be at least one supported mode (xsalsa20_poly1305)
         modes = [mode for mode in data['modes'] if mode in self._connection.supported_modes]
-        log.debug('received supported encryption modes: %s', ", ".join(modes))
+        log.debug('Received supported encryption modes: %s.', ", ".join(modes))
 
         mode = modes[0]
         await self.select_protocol(state.ip, state.port, mode)
-        log.info('selected the voice protocol for use (%s)', mode)
+        log.info('Selected the voice protocol for use (%s).', mode)
 
     @property
     def latency(self):
