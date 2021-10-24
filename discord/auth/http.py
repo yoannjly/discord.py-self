@@ -60,7 +60,10 @@ class AuthClient:
     def __del__(self):
         session = self.session
         if session:
-            session.connector._close()
+            try:
+                session.connector._close()
+            except AttributeError:
+                pass
 
     async def startup(self):
         if self._started:
