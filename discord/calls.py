@@ -51,7 +51,7 @@ class CallMessage:
     ended_timestamp: Optional[:class:`datetime.datetime`]
         A naive UTC datetime object that represents the time that the call has ended.
     participants: List[:class:`User`]
-        The list of users that participated in the call.
+        A list of users that participated in the call.
     message: :class:`Message`
         The message associated with this call message.
     """
@@ -199,7 +199,7 @@ class PrivateCall:
 
     @_running_only
     async def join(self, **kwargs):
-        await self.channel._connect(**kwargs)
+        return await self.channel._connect(**kwargs)
 
     connect = join
 
@@ -209,7 +209,7 @@ class PrivateCall:
         if not (client := state._get_voice_client(self.channel.me.id)):
             return
 
-        await client.disconnect(**kwargs)
+        return await client.disconnect(**kwargs)
 
     disconnect = leave
 
