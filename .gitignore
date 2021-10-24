@@ -13,6 +13,5 @@ venv
 *.flac
 *.mo
 cogs/
-utils.py
-test.py
+*test.py
 *.kate-swp
