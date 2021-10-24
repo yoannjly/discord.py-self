@@ -157,6 +157,8 @@ class AuthFailure(ClientException):
     """
     pass
 
+LoginFailure = AuthFailure
+
 class ConnectionClosed(ClientException):
     """Exception that's thrown when the gateway connection is
     closed for reasons that could not be handled internally.
