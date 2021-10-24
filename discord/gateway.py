@@ -707,7 +707,7 @@ class DiscordVoiceWebSocket:
     SESSION_DESCRIPTION
         Receive only. Gives you the secret key required for voice.
     SPEAKING
-        Send only. Notifies the client if you are currently speaking.
+        Send and receive. Manages who is currently speaking.
     HEARTBEAT_ACK
         Receive only. Tells you your heartbeat has been acknowledged.
     RESUME
@@ -719,7 +719,7 @@ class DiscordVoiceWebSocket:
     CLIENT_CONNECT
         Indicates a user has connected to voice.
     CLIENT_DISCONNECT
-        Receive only.  Indicates a user has disconnected from voice.
+        Receive only. Indicates a user has disconnected from voice.
     """
 
     IDENTIFY            = 0
@@ -847,6 +847,8 @@ class DiscordVoiceWebSocket:
             interval = data['heartbeat_interval'] / 1000.0
             self._keep_alive = VoiceKeepAliveHandler(ws=self, interval=min(interval, 5.0))
             self._keep_alive.start()
+        elif op == self.SPEAKING:
+            ...
 
     async def initial_connection(self, data):
         state = self._connection

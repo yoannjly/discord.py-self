@@ -204,7 +204,7 @@ class VoiceClient(VoiceProtocol):
         self.socket = None
         self.loop = state.loop
         self._state = state
-        # this will be used in the AudioPlayer thread
+        # This will be used in the threads
         self._connected = threading.Event()
 
         self._handshaking = False
@@ -218,9 +218,12 @@ class VoiceClient(VoiceProtocol):
         self.timestamp = 0
         self._runner = None
         self._player = None
+        self._recorder = None
         self.encoder = None
         self._lite_nonce = 0
         self.ws = None
+        self.idrcs = {}
+        self.ssids = {}
 
     warn_nacl = not has_nacl
     supported_modes = (
@@ -228,6 +231,16 @@ class VoiceClient(VoiceProtocol):
         'xsalsa20_poly1305_suffix',
         'xsalsa20_poly1305',
     )
+
+    @property
+    def ssrc(self):
+        """:class:`str`: Your ssrc."""
+        return self.idrcs.get(self.user.id)
+
+    @ssrc.setter
+    def ssrc(self, value):
+        self.idrcs[self.user.id] = value
+        self.ssids[value] = self.user.id
 
     @property
     def guild(self):
@@ -520,6 +533,15 @@ class VoiceClient(VoiceProtocol):
 
     # audio related
 
+    def _get_ssrc(self, query):
+        if isinstance(query, int):
+            return query, self.idrcs.get(query)
+        return self.ssids.get(query), query
+
+    def _set_ssrc(self, user_id, ssrc):
+        self.idrcs[user_id] = ssrc
+        self.ssids[ssrc] = user_id
+
     def _get_voice_packet(self, data):
         header = bytearray(12)
 
@@ -540,11 +562,25 @@ class VoiceClient(VoiceProtocol):
 
         return header + box.encrypt(bytes(data), bytes(nonce)).ciphertext
 
+    def _decrypt_xsalsa20_poly1305(self, header, data):
+        box = nacl.secret.SecretBox(bytes(self.secret_key))
+        nonce = bytearray(24)
+        nonce[:12] = header
+
+        return self._strip_header(box.decrypt(bytes(data), bytes(nonce)))
+
     def _encrypt_xsalsa20_poly1305_suffix(self, header, data):
         box = nacl.secret.SecretBox(bytes(self.secret_key))
         nonce = nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)
 
         return header + box.encrypt(bytes(data), nonce).ciphertext + nonce
+
+    def _decrypt_xsalsa20_poly1305_suffix(self, header, data):
+        box = nacl.secret.SecretBox(bytes(self.secret_key))
+        nonce_size = nacl.secret.SecretBox.NONCE_SIZE
+        nonce = data[-nonce_size:]
+
+        return self._strip_header(box.decrypt(bytes(data[:-nonce_size]), nonce))
 
     def _encrypt_xsalsa20_poly1305_lite(self, header, data):
         box = nacl.secret.SecretBox(bytes(self.secret_key))
@@ -554,6 +590,22 @@ class VoiceClient(VoiceProtocol):
         self.checked_add('_lite_nonce', 1, 4294967295)
 
         return header + box.encrypt(bytes(data), bytes(nonce)).ciphertext + nonce[:4]
+
+    def _decrypt_xsalsa20_poly1305_lite(self, header, data):
+        box = nacl.secret.SecretBox(bytes(self.secret_key))
+        nonce = bytearray(24)
+        nonce[:4] = data[-4:]
+        data = data[:-4]
+
+        return self._strip_header(box.decrypt(bytes(data), bytes(nonce)))
+
+    @staticmethod
+    def _strip_header(data):
+        if data[0] == 0xbe and data[1] == 0xde and len(data) > 4:
+            _, length = struct.unpack_from('>HH', data)
+            offset = 4 + length * 4
+            data = data[offset:]
+        return data
 
     def play(self, source, *, after=None):
         """Plays an :class:`AudioSource`.
@@ -634,12 +686,26 @@ class VoiceClient(VoiceProtocol):
     @source.setter
     def source(self, value):
         if not isinstance(value, AudioSource):
-            raise TypeError('expected AudioSource not {0.__class__.__name__}.'.format(value))
+            raise TypeError('Expected AudioSource not {0.__class__.__name__}'.format(value))
 
         if self._player is None:
-            raise ValueError('Not playing anything.')
+            raise ValueError('Not playing anything')
 
         self._player._set_source(value)
+
+    @property
+    def sink(self):
+        """Optional[:class:`AudioSink`]: Where received audio is being sent.
+
+        This property can also be used to change the value.
+        """
+
+    @sink.setter
+    def sink(self, value):
+        if not isinstance(value, AudioSink):
+            raise TypeError('Expected AudioSink not {value.__class__.__name__}')
+        if self._recorder is None:
+            raise ValueError('Not listening')
 
     def send_audio_packet(self, data, *, encode=True):
         """Sends an audio packet composed of the data.
