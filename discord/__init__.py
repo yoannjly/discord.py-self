@@ -51,6 +51,7 @@ from .enums import *
 from .embeds import Embed
 from .mentions import AllowedMentions
 from .player import *
+from .recorder import *
 from .webhook import *
 from .voice_client import VoiceClient, VoiceProtocol
 from .audit_logs import AuditLogChanges, AuditLogEntry, AuditLogDiff
@@ -58,8 +59,8 @@ from .raw_models import *
 from .team import *
 from .sticker import Sticker
 
-VersionInfo = namedtuple('VersionInfo', 'major minor micro releaselevel serial')
+_VersionInfo = namedtuple('VersionInfo', 'major minor micro releaselevel serial')
 
-version_info = VersionInfo(major=1, minor=10, micro=0, releaselevel='final', serial=0)
+version_info = _VersionInfo(major=1, minor=10, micro=0, releaselevel='alpha', serial=0)
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
