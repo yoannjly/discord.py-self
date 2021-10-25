@@ -92,10 +92,11 @@ class VoiceState:
 
     __slots__ = ('session_id', 'deaf', 'mute', 'self_mute',
                  'self_stream', 'self_video', 'self_deaf', 'afk', 'channel',
-                 'requested_to_speak_at', 'suppress')
+                 'requested_to_speak_at', 'suppress')#, 'speaking')
 
     def __init__(self, *, data, channel=None):
         self.session_id = data.get('session_id')
+        #self.speaking = None
         self._update(data, channel)
 
     def _update(self, data, channel):

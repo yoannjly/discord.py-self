@@ -42,6 +42,7 @@ from . import utils
 from .activity import BaseActivity
 from .enums import SpeakingState
 from .errors import ConnectionClosed, InvalidArgument
+from .recorder import SSRC
 
 log = logging.getLogger(__name__)
 
@@ -829,7 +830,7 @@ class DiscordVoiceWebSocket:
         await self.send_as_json(payload)
 
     async def received_message(self, msg):
-        log.debug('Voice websocket frame received: %s.', msg)
+        log.debug('Voice received: %s.', msg)
         op = msg['op']
         data = msg.get('d')
 
@@ -843,12 +844,27 @@ class DiscordVoiceWebSocket:
         elif op == self.SESSION_DESCRIPTION:
             self._connection.mode = data['mode']
             await self.load_secret_key(data)
+            #await self.speak()
+            #await asyncio.sleep(0.5)
+            #self._connection.send_audio_packet(b'\xF8\xFF\xFE', encode=False)
+            #await self.speak(False)
         elif op == self.HELLO:
             interval = data['heartbeat_interval'] / 1000.0
             self._keep_alive = VoiceKeepAliveHandler(ws=self, interval=min(interval, 5.0))
             self._keep_alive.start()
         elif op == self.SPEAKING:
-            ...
+            state = self._connection
+            user_id = int(data['user_id'])
+            speaking = data['speaking']
+            print(speaking)
+            ssrc = state._flip_ssrc(user_id)
+            if ssrc is None:
+                state._set_ssrc(user_id, SSRC(data['ssrc'], speaking))
+            else:
+                ssrc.speaking = speaking
+
+            #item = state.guild or state._state
+            #item._update_speaking_status(user_id, speaking)
 
     async def initial_connection(self, data):
         state = self._connection

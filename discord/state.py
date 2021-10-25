@@ -222,6 +222,17 @@ class ConnectionState:
     def voice_clients(self):
         return list(self._voice_clients.values())
 
+    def _update_speaking_status(self, user_id, speaking):
+        user = self.get_user(user_id) or Object(user_id)
+
+        after = self._voice_states.get(user_id)
+        if after is None:
+            return
+        before = copy.copy(after)
+        after.speaking = speaking
+
+        self.dispatch('voice_state_update', user, before, after)
+
     def _update_voice_state(self, data):
         user_id = int(data['user_id'])
         channel_id = utils._get_as_snowflake(data, 'channel_id')

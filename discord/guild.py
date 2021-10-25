@@ -220,6 +220,17 @@ class Guild(Hashable):
         resolved.append('member_count=%r' % getattr(self, '_member_count', None))
         return '<Guild %s>' % ' '.join(resolved)
 
+    def _update_speaking_status(self, user_id, speaking):
+        member = self.get_member(user_id) or Object(user_id)
+
+        after = self._voice_states.get(user_id)
+        if after is None:
+            return
+        before = copy.copy(after)
+        after.speaking = speaking
+
+        self._state.dispatch('voice_state_update', member, before, after)
+
     def _update_voice_state(self, data, channel_id):
         user_id = int(data['user_id'])
         channel = self.get_channel(channel_id)

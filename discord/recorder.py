@@ -21,3 +21,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
+
+class SSRC:
+    def __init__(self, ssrc, speaking):
+        self._ssrc = ssrc
+        self.speaking = speaking
+
+    def __repr__(self):
+        return self._ssrc

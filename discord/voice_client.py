@@ -533,10 +533,11 @@ class VoiceClient(VoiceProtocol):
 
     # audio related
 
-    def _get_ssrc(self, query):
-        if isinstance(query, int):
-            return query, self.idrcs.get(query)
-        return self.ssids.get(query), query
+    def _flip_ssrc(self, query):
+        value = self.idrcs.get(query)
+        if value is None:
+            value = self.ssids.get(query)
+        return value
 
     def _set_ssrc(self, user_id, ssrc):
         self.idrcs[user_id] = ssrc
