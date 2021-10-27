@@ -202,11 +202,10 @@ class Client:
             'before_identify': self._call_before_identify_hook
         }
 
-        self._connection = self._get_state(**options)
+        self._connection = state = self._get_state(**options)
+        state._get_ws = lambda: self.ws
         self._closed = False
         self._ready = asyncio.Event()
-        self._connection._get_websocket = self._get_websocket
-        self._connection._get_client = lambda: self
 
         if VoiceClient.warn_nacl:
             VoiceClient.warn_nacl = False
@@ -214,12 +213,10 @@ class Client:
 
     # internals
 
-    def _get_websocket(self):
-        return self.ws
-
     def _get_state(self, **options):
         return ConnectionState(dispatch=self.dispatch, handlers=self._handlers,
-                               hooks=self._hooks, http=self.http, loop=self.loop, **options)
+                               hooks=self._hooks, http=self.http, loop=self.loop,
+                               client=self, **options)
 
     def _handle_ready(self):
         self._ready.set()
@@ -968,7 +965,7 @@ class Client:
         if status:
             try:
                 await self._connection.user.edit_settings(status=status_enum)
-            except:
+            except Exception:  # Not essential to actually changing status...
                 pass
 
         for guild in self._connection.guilds:

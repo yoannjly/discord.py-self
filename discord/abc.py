@@ -1267,8 +1267,7 @@ class Connectable(metaclass=abc.ABCMeta):
         if state._get_voice_client(key_id):
             raise ClientException('Already connected to voice.')
 
-        client = state._get_client()
-        voice = cls(client, _channel or self)
+        voice = cls(state.client, _channel or self)
 
         if not isinstance(voice, VoiceProtocol):
             raise TypeError('Type must meet VoiceProtocol abstract base class.')
@@ -1280,7 +1279,7 @@ class Connectable(metaclass=abc.ABCMeta):
         except asyncio.TimeoutError:
             try:
                 await voice.disconnect(force=True)
-            except:
+            except Exception:
                 # we don't care if disconnect failed because connection failed
                 pass
             raise # re-raise

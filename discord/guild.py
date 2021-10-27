@@ -386,7 +386,7 @@ class Guild(Hashable):
             await ticket.acquire()
 
         state = self._state
-        ws = state._get_websocket()
+        ws = state.ws
 
         def cleanup(*, successful):
             if ticket:
@@ -2395,13 +2395,12 @@ class Guild(Hashable):
         """
 
         state = self._state
-        ws = state._get_websocket()
         channel_id = channel.id if channel else None
 
         if channel_id and preferred_region == '':
             preferred_region = state.preferred_region
 
-        await ws.voice_state(self.id, channel_id, self_mute, self_deaf, self_video, preferred_region=str(preferred_region))
+        await state.ws.voice_state(self.id, channel_id, self_mute, self_deaf, self_video, preferred_region=str(preferred_region))
 
     async def mute(self, *, duration=None):
         """|coro|

@@ -743,7 +743,7 @@ async def _get_build_number(session): # Thank you Discord-S.C.U.M
         build_file = await build_request.text()
         build_index = build_file.find('buildNumber') + 14
         return int(build_file[build_index:build_index + 5])
-    except:
+    except asyncio.TimeoutError:
         log.warning('Could not fetch client build number.')
         return 88863
 
@@ -753,7 +753,7 @@ async def _get_user_agent(session):
         request = await session.request('GET', 'https://jnrbsn.github.io/user-agents/user-agents.json', timeout=7)
         response = json.loads(await request.text())
         return response[0]
-    except:
+    except asyncio.TimeoutError:
         log.warning('Could not fetch user-agent.')
         return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36'
 
@@ -765,6 +765,6 @@ async def _get_browser_version(session):
         if response[0]['versions'][4]['channel'] == 'stable':
             return response[0]['versions'][4]['version']
         raise RuntimeError
-    except:
+    except (asyncio.TimeoutError, RuntimeError):
         log.warning('Could not fetch browser version.')
         return '91.0.4472.77'

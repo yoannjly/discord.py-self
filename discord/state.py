@@ -102,9 +102,10 @@ async def logging_coroutine(coroutine, *, info):
         log.exception('Exception occurred during %s', info)
 
 class ConnectionState:
-    def __init__(self, *, dispatch, handlers, hooks, http, loop, **options):
+    def __init__(self, *, dispatch, handlers, hooks, http, loop, client, **options):
         self.loop = loop
         self.http = http
+        self.client = client
         self.max_messages = options.get('max_messages', 1000)
         if self.max_messages is not None and self.max_messages <= 0:
             self.max_messages = 1000
@@ -121,7 +122,7 @@ class ConnectionState:
             raise TypeError('allowed_mentions parameter must be AllowedMentions')
 
         self.allowed_mentions = allowed_mentions
-        self._chunk_requests = {} # Dict[Union[int, str], ChunkRequest]
+        self._chunk_requests = {}  # Dict[Union[int, str], ChunkRequest]
 
         activity = options.get('activity', None)
         if activity:
@@ -212,6 +213,10 @@ class ConnectionState:
             pass
         else:
             await coro(*args, **kwargs)
+
+    @property
+    def ws(self):
+        return self._get_ws()
 
     @property
     def self_id(self):
@@ -398,22 +403,19 @@ class ConnectionState:
         return channel or Object(id=channel_id), guild
 
     async def request_guild(self, guild_id):
-        ws = self._get_websocket()
-        await ws.request_lazy_guild(guild_id, typing=True, activities=True, threads=True)
+        await self.ws.request_lazy_guild(guild_id, typing=True, activities=True, threads=True)
 
     async def chunker(self, guild_id, query='', limit=0, presences=True, *, nonce=None):
-        ws = self._get_websocket()
-        await ws.request_chunks([guild_id], query=query, limit=limit, presences=presences, nonce=nonce)
+        await self.ws.request_chunks([guild_id], query=query, limit=limit, presences=presences, nonce=nonce)
 
     async def query_members(self, guild, query, limit, user_ids, cache, presences):
         guild_id = guild.id
-        ws = self._get_websocket()
 
         request = ChunkRequest(guild.id, self.loop, self._get_guild, cache=cache)
         self._chunk_requests[request.nonce] = request
 
         try:
-            await ws.request_chunks([guild_id], query=query, limit=limit, user_ids=user_ids, presences=presences, nonce=request.nonce)
+            await self.ws.request_chunks([guild_id], query=query, limit=limit, user_ids=user_ids, presences=presences, nonce=request.nonce)
             return await asyncio.wait_for(request.wait(), timeout=30.0)
         except asyncio.TimeoutError:
             log.warning('Timed out waiting for chunks with query %r and limit %d for guild_id %d', query, limit, guild_id)
