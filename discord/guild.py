@@ -349,18 +349,24 @@ class Guild(Hashable):
         for obj in guild.get('voice_states', []):
             self._update_voice_state(obj, int(obj['channel_id']))
 
-    async def subscribe(self, delay=0.25, op_ranges=None, ticket=None, max_online=None):
+    async def subscribe(self, *, delay=0.25, op_ranges=None, ticket=None, max_online=None, channel=None):
         """|coro|
 
         Abuses the member sidebar to scrape all members*.
 
         *Discord doesn't provide offline members for "large" guilds.
         *If a guild doesn't have a channel (of any type) @everyone can view,
-        the subscribing currently fails. In the future, it'll pick the next
-        most-used role and look for a channel that role can view.
+        the subscribing currently fails.
+
+        .. note::
+            Remember that the member list is in relation to each channel, so if the channel
+            the channel subscribed to isn't one that all members can see you won't get all members.
+            It's preferable to specify your own channel.
 
         You can only request members from the sidebar in 100 member ranges, and
         you can only specify up to 2 ranges per request.
+
+        This is prone to failure in certain cases.
 
         This is a websocket operation and can be extremely slow.
 
@@ -371,6 +377,8 @@ class Guild(Hashable):
             Note: By default, we wait for the GUILD_MEMBER_LIST_UPDATE to arrive before
             continuing. However, those arrive extremely fast so we need to add an extra
             delay to try to avoid rate-limits.
+        channel: :class:`Channel`
+            The channel to subscribe to.
 
         Returns
         --------
@@ -397,6 +405,8 @@ class Guild(Hashable):
                 del self._subscribing
 
         def get_channel():
+            if channel:
+                return channel.id
             for channel in self.channels:
                 perms = channel.overwrites_for(self.default_role)
                 if perms.view_channel is None:
@@ -406,9 +416,10 @@ class Guild(Hashable):
             return # TODO: Check for a "member" role and do the above
 
         def get_ranges():
-            online = ceil(self._online_count / 100.0) * 100
+            amount = self._online_count if self.large else self._member_count
+            ceiling = ceil(amount / 100.0) * 100
             ranges = []
-            for i in range(1, int(online / 100) + 1):
+            for i in range(1, int(ceiling / 100) + 1):
                 min = i * 100
                 max = min + 99
                 ranges.append([min, max])
@@ -423,7 +434,7 @@ class Guild(Hashable):
                 except IndexError:
                     pass
                 return current
-            except:
+            except IndexError:
                 return
 
         channel_id = get_channel()
@@ -908,14 +919,12 @@ class Guild(Hashable):
         """:class:`bool`: Returns a boolean indicating if the guild is "subscribed".
 
         A subscribed guild means that opcode 14s have been sent for every range
-        available. Note that every 100 new members, a new one has to be sent.
+        available in a channel that every member can see.
+        Note that every 100 new members, a new one has to be sent.
 
         .. versionadded:: 1.9
         """
-        try:
-            return not self._subscribing
-        except:
-            return False
+        return not getattr(self, '_subscribing', True)
 
     @property
     def created_at(self):
