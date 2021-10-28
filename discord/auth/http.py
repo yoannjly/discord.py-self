@@ -73,6 +73,7 @@ class AuthClient:
         self.user_agent = ua = await utils._get_user_agent(self.session)
         self.client_build_number = bn = await utils._get_build_number(self.session)
         self.browser_version = bv = await utils._get_browser_version(self.session)
+        log.debug('Found user agent %s (%s), build number %s.', ua, bv, bn)
         self.super_properties = super_properties = {
             'os': 'Windows',
             'browser': 'Chrome',

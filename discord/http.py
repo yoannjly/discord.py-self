@@ -139,6 +139,7 @@ class HTTPClient:
         self.user_agent = ua = await utils._get_user_agent(self.__session)
         self.client_build_number = bn = await utils._get_build_number(self.__session)
         self.browser_version = bv = await utils._get_browser_version(self.__session)
+        log.debug('Found user agent %s (%s), build number %s.', ua, bv, bn)
         self.super_properties = super_properties = {
             'os': 'Windows',
             'browser': 'Chrome',
