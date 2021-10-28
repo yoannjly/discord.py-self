@@ -1162,6 +1162,7 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
         return PrivateCall(**kwargs)
 
     async def _get_channel(self):
+        await self._state.access_private_channel(self.id)
         return self
 
     def _initial_ring(self):
@@ -1219,6 +1220,7 @@ class DMChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
         return base
 
     async def connect(self, *, ring=True, **kwargs):
+        await self._get_channel()
         call = self.call
         if call is not None:
             ring = False
@@ -1318,6 +1320,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
         return GroupCall(**kwargs)
 
     async def _get_channel(self):
+        await self._state.access_private_channel(self.id)
         return self
 
     def _initial_ring(self):
@@ -1423,6 +1426,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
         return base
 
     async def connect(self, *, ring=True, **kwargs):
+        await self._get_channel()
         call = self.call
         if call is not None:
             ring = False
@@ -1453,6 +1457,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
 
         # TODO: wait for the corresponding WS event
 
+        await self._get_channel()
         req = self._state.http.add_group_recipient
         for recipient in recipients:
             await req(self.id, recipient.id)
@@ -1475,6 +1480,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
 
         # TODO: wait for the corresponding WS event
 
+        await self._get_channel()
         req = self._state.http.remove_group_recipient
         for recipient in recipients:
             await req(self.id, recipient.id)
@@ -1498,6 +1504,8 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
         HTTPException
             Editing the group failed.
         """
+
+        await self._get_channel()
 
         try:
             icon_bytes = fields['icon']
@@ -1523,6 +1531,7 @@ class GroupChannel(discord.abc.Messageable, discord.abc.Connectable, Hashable):
             Leaving the group failed.
         """
 
+        await self._get_channel()
         await self._state.http.leave_group(self.id)
 
 def _channel_factory(channel_type):

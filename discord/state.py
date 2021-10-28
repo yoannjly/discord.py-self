@@ -25,14 +25,15 @@ DEALINGS IN THE SOFTWARE.
 """
 
 import asyncio
-from collections import deque, OrderedDict
+from collections import deque
 import copy
 import datetime
 import logging
 from weakref import WeakValueDictionary
 import inspect
-
+import time
 import os
+from random import randrange
 
 from .guild import Guild
 from .activity import BaseActivity
@@ -181,8 +182,9 @@ class ConnectionState:
         self._voice_clients = {}
         self._voice_states = {}
 
-        self._private_channels = OrderedDict()
+        self._private_channels = {}
         self._private_channels_by_user = {}
+        self._last_private_channel = (None, None)
         self._messages = self.max_messages and deque(maxlen=self.max_messages)
         self._call_message_cache = {}
 
@@ -336,6 +338,27 @@ class ConnectionState:
     @property
     def private_channels(self):
         return list(self._private_channels.values())
+
+    async def access_private_channel(self, channel_id):
+        if not self._get_accessed_private_channel(channel_id):
+            await self._access_private_channel(channel_id)
+            self._set_accessed_private_channel(channel_id)
+
+    async def _access_private_channel(self, channel_id):
+        if (ws := self.ws) is None:
+            return
+
+        try:
+            await ws.access_dm(channel_id)
+        except Exception as exc:
+            log.warning('Sending ACCESS_DM failed for channel %s, (%s)', channel_id, exc)
+
+    def _set_accessed_private_channel(self, channel_id):
+        self._last_private_channel = (channel_id, time.time())
+
+    def _get_accessed_private_channel(self, channel_id):
+        timestamp, existing_id = self._last_private_channel
+        return existing_id == channel_id and int(time.time() - timestamp) < randrange(120000, 420000)
 
     def _get_private_channel(self, channel_id):
         try:

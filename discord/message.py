@@ -1524,6 +1524,7 @@ class PartialMessage(Hashable):
             The full message.
         """
 
+        await self.channel._get_channel()
         data = await self._state.http.get_message(self.channel.id, self.id)
         return self._state.create_message(channel=self.channel, data=data)
 
