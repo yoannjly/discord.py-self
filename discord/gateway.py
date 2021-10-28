@@ -487,7 +487,7 @@ class DiscordWebSocket:
         elif event == 'RESUMED':
             self._trace = trace = data.get('_trace', [])
             log.info('Bot has successfully RESUMED session %s under trace %s.',
-                     self.session_id, ', '.join(trace))
+                     self.session_id, trace)
 
         try:
             func = self._discord_parsers[event]
@@ -846,7 +846,7 @@ class DiscordVoiceWebSocket:
             await self.load_secret_key(data)
             #await self.speak()
             #await asyncio.sleep(0.5)
-            #self._connection.send_audio_packet(b'\xF8\xFF\xFE', encode=False)
+            #self._connection.send_audio_packet(b'\xF8\xFF\xFE')
             #await self.speak(False)
         elif op == self.HELLO:
             interval = data['heartbeat_interval'] / 1000.0
@@ -856,7 +856,6 @@ class DiscordVoiceWebSocket:
             state = self._connection
             user_id = int(data['user_id'])
             speaking = data['speaking']
-            print(speaking)
             ssrc = state._flip_ssrc(user_id)
             if ssrc is None:
                 state._set_ssrc(user_id, SSRC(data['ssrc'], speaking))
@@ -878,9 +877,9 @@ class DiscordVoiceWebSocket:
         struct.pack_into('>I', packet, 4, state.ssrc)
         state.socket.sendto(packet, (state.endpoint_ip, state.voice_port))
         recv = await self.loop.sock_recv(state.socket, 70)
-        log.debug('received packet in initial_connection: %s.', recv)
+        log.debug('Received packet in initial_connection: %s.', recv)
 
-        # the ip is ascii starting at the 4th byte and ending at the first null
+        # The ip is ascii starting at the 4th byte and ending at the first null
         ip_start = 4
         ip_end = recv.index(0, ip_start)
         state.ip = recv[ip_start:ip_end].decode('ascii')
@@ -888,7 +887,7 @@ class DiscordVoiceWebSocket:
         state.port = struct.unpack_from('>H', recv, len(recv) - 2)[0]
         log.debug('Detected ip: %s port: %s.', state.ip, state.port)
 
-        # there *should* always be at least one supported mode (xsalsa20_poly1305)
+        # There *should* always be at least one supported mode (xsalsa20_poly1305)
         modes = [mode for mode in data['modes'] if mode in self._connection.supported_modes]
         log.debug('Received supported encryption modes: %s.', ", ".join(modes))
 
@@ -912,7 +911,7 @@ class DiscordVoiceWebSocket:
         return sum(heartbeat.recent_ack_latencies) / len(heartbeat.recent_ack_latencies)
 
     async def load_secret_key(self, data):
-        log.info('received secret key for voice connection')
+        log.info('Received secret key for voice connection.')
         self.secret_key = self._connection.secret_key = data.get('secret_key')
         await self.speak()
         await self.speak(False)

@@ -22,6 +22,11 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
 
+import struct
+
+unpacker = struct.Struct('>xxHII')
+
+
 class SSRC:
     def __init__(self, ssrc, speaking):
         self._ssrc = ssrc
@@ -29,3 +34,12 @@ class SSRC:
 
     def __repr__(self):
         return self._ssrc
+
+
+class VoicePacket:  # IN-PROGRESS
+    def __init__(self, client, data):
+        self.client = client
+        self._data = data = bytearray(data)
+
+        self.data = data[12:]
+        self.header = data[:12]

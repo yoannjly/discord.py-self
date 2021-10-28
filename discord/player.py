@@ -87,6 +87,10 @@ class AudioSource:
         """
         raise NotImplementedError
 
+    @property
+    def opus(self):
+        return self.is_opus()
+
     def is_opus(self):
         """Checks if the audio source is already encoded in Opus."""
         return False
@@ -557,7 +561,7 @@ class AudioPlayer(threading.Thread):
         self._resumed = threading.Event()
         self._resumed.set() # we are not paused
         self._current_error = None
-        self._connected = client._connected
+        self._connected = client.client._connected
         self._lock = threading.Lock()
 
         if after is not None and not callable(after):
@@ -568,7 +572,7 @@ class AudioPlayer(threading.Thread):
         self._start = time.perf_counter()
 
         # getattr lookup speed ups
-        play_audio = self.client.send_audio_packet
+        play_audio = self.client.send
         self._speak(True)
 
         while not self._end.is_set():
@@ -657,4 +661,4 @@ class AudioPlayer(threading.Thread):
         try:
             asyncio.run_coroutine_threadsafe(self.client.ws.speak(speaking), self.client.loop)
         except Exception as e:
-            log.info("Speaking call in player failed: %s", e)
+            log.info('Speaking call in player failed: %s.', e)
