@@ -152,9 +152,9 @@ class ContextProperties: # Thank you Discord-S.C.U.M
     def _from_accept_invite_page(cls, *, guild_id, channel_id, channel_type):
         data = {
             'location': 'Accept Invite Page',
-            'location_guild_id': guild_id,
-            'location_channel_id': channel_id,
-            'location_channel_type': channel_type
+            'location_guild_id': str(guild_id),
+            'location_channel_id': str(channel_id),
+            'location_channel_type': int(channel_type)
         }
         return cls(data)
 
@@ -162,9 +162,9 @@ class ContextProperties: # Thank you Discord-S.C.U.M
     def _from_join_guild_popup(cls, *, guild_id, channel_id, channel_type):
         data = {
             'location': 'Join Guild',
-            'location_guild_id': guild_id,
-            'location_channel_id': channel_id,
-            'location_channel_type': channel_type
+            'location_guild_id': str(guild_id),
+            'location_channel_id': str(channel_id),
+            'location_channel_type': int(channel_type)
         }
         return cls(data)
 
@@ -172,10 +172,10 @@ class ContextProperties: # Thank you Discord-S.C.U.M
     def _from_invite_embed(cls, *, guild_id, channel_id, channel_type, message_id):
         data = {
             'location': 'Invite Button Embed',
-            'location_guild_id': guild_id,
-            'location_channel_id': channel_id,
-            'location_channel_type': channel_type,
-            'location_message_id': message_id
+            'location_guild_id': str(guild_id),
+            'location_channel_id': str(channel_id),
+            'location_channel_type': int(channel_type),
+            'location_message_id': str(message_id)
         }
         return cls(data)
 
