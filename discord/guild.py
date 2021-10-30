@@ -405,15 +405,13 @@ class Guild(Hashable):
                 del self._subscribing
 
         def get_channel():
-            if channel:
-                return channel.id
             for channel in self.channels:
                 perms = channel.overwrites_for(self.default_role)
                 if perms.view_channel is None:
                     perms = self.default_role.permissions
                 if perms.view_channel:
                     return channel.id
-            return # TODO: Check for a "member" role and do the above
+            return  # TODO: Better channel detection
 
         def get_ranges():
             amount = self._online_count if self.large else self._member_count
@@ -437,7 +435,10 @@ class Guild(Hashable):
             except IndexError:
                 return
 
-        channel_id = get_channel()
+        if channel:
+            channel_id = channel.id
+        else:
+            channel_id = get_channel()
         if not channel_id:
             log.warn('Guild %s subscribing failed (no channels available).' % self.id)
             cleanup(successful=False)
