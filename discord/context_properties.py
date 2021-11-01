@@ -49,7 +49,11 @@ class ContextProperties: # Thank you Discord-S.C.U.M
             'Group DM': 'eyJsb2NhdGlvbiI6Ikdyb3VwIERNIn0=',
             'DM Channel': 'eyJsb2NhdGlvbiI6IkRNIENoYW5uZWwifQ==',
             '/app': 'eyJsb2NhdGlvbiI6ICIvYXBwIn0=',
-            'Login': 'eyJsb2NhdGlvbiI6IkxvZ2luIn0='
+            'Login': 'eyJsb2NhdGlvbiI6IkxvZ2luIn0=',
+            'Register': 'eyJsb2NhdGlvbiI6IlJlZ2lzdGVyIn0=',
+            'Verify Email': 'eyJsb2NhdGlvbiI6IlZlcmlmeSBFbWFpbCJ9',
+            'New Group DM': 'eyJsb2NhdGlvbiI6Ik5ldyBHcm91cCBETSJ9',
+            'Add Friends to DM': 'eyJsb2NhdGlvbiI6IkFkZCBGcmllbmRzIHRvIERNIn0='
         }
 
         try:
@@ -105,9 +109,23 @@ class ContextProperties: # Thank you Discord-S.C.U.M
         return cls(data)
 
     @classmethod
+    def _from_new_group_dm(cls):
+        data = {
+            'location': 'New Group DM'
+        }
+        return cls(data)
+
+    @classmethod
     def _from_dm_channel(cls):
         data = {
             'location': 'DM Channel'
+        }
+        return cls(data)
+
+    @classmethod
+    def _from_add_to_dm(cls):
+        data = {
+            'location': 'Add Friends to DM'
         }
         return cls(data)
 
@@ -133,12 +151,26 @@ class ContextProperties: # Thank you Discord-S.C.U.M
         return cls(data)
 
     @classmethod
+    def _from_register(cls):
+        data = {
+            'location': 'Register'
+        }
+        return cls(data)
+
+    @classmethod
+    def _from_verification(cls):
+        data = {
+            'location': 'Verify Email'
+        }
+        return cls(data)
+
+    @classmethod
     def _from_accept_invite_page(cls, *, guild_id, channel_id, channel_type):
         data = {
             'location': 'Accept Invite Page',
-            'location_guild_id': guild_id,
-            'location_channel_id': channel_id,
-            'location_channel_type': channel_type
+            'location_guild_id': str(guild_id),
+            'location_channel_id': str(channel_id),
+            'location_channel_type': int(channel_type)
         }
         return cls(data)
 
@@ -146,9 +178,9 @@ class ContextProperties: # Thank you Discord-S.C.U.M
     def _from_join_guild_popup(cls, *, guild_id, channel_id, channel_type):
         data = {
             'location': 'Join Guild',
-            'location_guild_id': guild_id,
-            'location_channel_id': channel_id,
-            'location_channel_type': channel_type
+            'location_guild_id': str(guild_id),
+            'location_channel_id': str(channel_id),
+            'location_channel_type': int(channel_type)
         }
         return cls(data)
 
@@ -156,10 +188,10 @@ class ContextProperties: # Thank you Discord-S.C.U.M
     def _from_invite_embed(cls, *, guild_id, channel_id, channel_type, message_id):
         data = {
             'location': 'Invite Button Embed',
-            'location_guild_id': guild_id,
-            'location_channel_id': channel_id,
-            'location_channel_type': channel_type,
-            'location_message_id': message_id
+            'location_guild_id': str(guild_id),
+            'location_channel_id': str(channel_id),
+            'location_channel_type': int(channel_type),
+            'location_message_id': str(message_id)
         }
         return cls(data)
 

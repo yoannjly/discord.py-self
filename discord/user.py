@@ -25,14 +25,20 @@ DEALINGS IN THE SOFTWARE.
 """
 
 import discord.abc
-from .flags import PublicUserFlags
-from .utils import snowflake_time, _bytes_to_base64_data, parse_time, cached_slot_property
-from .enums import DefaultAvatar, FriendFlags, StickerAnimationOptions, Theme, UserContentFilter, RelationshipAction, RelationshipType, UserFlags, HypeSquadHouse, PremiumType, try_enum
-from .errors import ClientException, NotFound
-from .colour import Colour
+
 from .asset import Asset
-from .settings import Settings
+from .colour import Colour
+from .enums import (DefaultAvatar, HypeSquadHouse, PremiumType,
+                    RelationshipAction, RelationshipType, UserFlags, try_enum)
+from .errors import ClientException, NotFound
+from .flags import PublicUserFlags
 from .object import Object
+from .settings import Settings
+from .utils import (_bytes_to_base64_data, cached_slot_property, parse_time,
+                    snowflake_time)
+
+
+from datetime import datetime
 
 class Note:
     """Represents a Discord note."""
@@ -54,7 +60,7 @@ class Note:
         ClientException
             Attempted to access note without fetching it.
         """
-        if note == 0:
+        if self._note == 0:
             raise ClientException('Note is not fetched.')
         return self._note
 
@@ -389,6 +395,11 @@ class BaseUser(_BaseUser):
         }
 
     @property
+    def voice(self):
+        """Optional[:class:`VoiceState`]: Returns the user's current voice state."""
+        return self._state._voice_state_for(self.id)
+
+    @property
     def public_flags(self):
         """:class:`PublicUserFlags`: The publicly available flags the user has."""
         return PublicUserFlags._from_value(self._public_flags)
@@ -600,6 +611,7 @@ class ClientUser(BaseUser):
         super().__init__(state=state, data=data)
         self._relationships = {}
         self.note = Note(state, self.id, user=self)
+        self.settings = None
 
     def __repr__(self):
         return '<ClientUser id={0.id} name={0.name!r} discriminator={0.discriminator!r}' \
@@ -667,7 +679,7 @@ class ClientUser(BaseUser):
         -----------
         password: :class:`str`
             The current password for the client's account.
-            Required for everything except avatar, banner, accent_colour, and bio.
+            Required for everything except avatar, banner, accent_colour, date_of_birth, and bio.
         new_password: :class:`str`
             The new password you wish to change to.
         email: :class:`str`
@@ -691,6 +703,8 @@ class ClientUser(BaseUser):
         bio: :class:`str`
             Your 'about me' section.
             Could be ``None`` to represent no 'about me'.
+        date_of_birth: :class:`datetime.datetime`
+            Your date of birth.
 
         Raises
         ------
@@ -700,7 +714,8 @@ class ClientUser(BaseUser):
             Wrong image format passed for ``avatar``.
         ClientException
             Password was not passed when it was required.
-            House field was not a HypeSquadHouse.
+            `house` field was not a HypeSquadHouse.
+            `date_of_birth` field was not a :class:`datetime.datetime` object.
         """
 
         args = {}
@@ -753,6 +768,12 @@ class ClientUser(BaseUser):
                 args['bio'] = bio
             else:
                 args['bio'] = ''
+
+        if 'date_of_birth' in fields:
+            dob = fields['date_of_birth']
+            if not isinstance(dob, datetime):
+                raise ClientException('`date_of_birth` parameter was not a datetime object')
+            args['date_of_birth'] = dob.strftime('%F')
 
         http = self._state.http
 
@@ -990,45 +1011,7 @@ class ClientUser(BaseUser):
 
     accent_color = accent_colour
 
-    def disable(self, password):
-        """|coro|
-
-        Disables the client's account.
-
-        .. versionadded:: 1.9
-
-        Parameters
-        -----------
-        password :class:`str`
-            The current password of the user.
-
-        Raises
-        -------
-        HTTPException
-            Disabling the account failed.
-        """
-        return self._state.http.disable_account(password)
-
-    def delete(self, password):
-        """|coro|
-
-        Deletes the client's account.
-
-        .. versionadded:: 1.9
-
-        Parameters
-        -----------
-        password :class:`str`
-            The current password of the user.
-
-        Raises
-        -------
-        HTTPException
-            Deleting the account failed.
-        """
-        return self._state.http.delete_account(password)
-
-class User(BaseUser, discord.abc.Messageable):
+class User(BaseUser, discord.abc.Connectable, discord.abc.Messageable):
     """Represents a Discord user.
 
     .. container:: operations
@@ -1070,6 +1053,12 @@ class User(BaseUser, discord.abc.Messageable):
     def __repr__(self):
         return '<User id={0.id} name={0.name!r} discriminator={0.discriminator!r} bot={0.bot}>'.format(self)
 
+    def _get_voice_client_key(self):
+        return self._state.user.id, 'self_id'
+
+    def _get_voice_state_pair(self):
+        return self._state.user.id, self.dm_channel.id
+
     async def _get_channel(self):
         ch = await self.create_dm()
         return ch
@@ -1082,6 +1071,10 @@ class User(BaseUser, discord.abc.Messageable):
         :meth:`create_dm` coroutine function.
         """
         return self._state._get_private_channel_by_user(self.id)
+
+    @property
+    def call(self):
+        return getattr(self.dm_channel, 'call', None)
 
     async def create_dm(self):
         """|coro|
@@ -1108,6 +1101,15 @@ class User(BaseUser, discord.abc.Messageable):
     def relationship(self):
         """Optional[:class:`Relationship`]: Returns the :class:`Relationship` with this user if applicable, ``None`` otherwise."""
         return self._state.user.get_relationship(self.id)
+
+    async def connect(self, *, ring=True, **kwargs):
+        channel = await self._get_channel()
+        call = self.call
+        if call is not None:
+            ring = False
+        await super().connect(_channel=channel, **kwargs)
+        if ring:
+            await channel._initial_ring()
 
     async def mutual_friends(self):
         """|coro|

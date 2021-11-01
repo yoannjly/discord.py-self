@@ -220,6 +220,17 @@ class Guild(Hashable):
         resolved.append('member_count=%r' % getattr(self, '_member_count', None))
         return '<Guild %s>' % ' '.join(resolved)
 
+    def _update_speaking_status(self, user_id, speaking):
+        member = self.get_member(user_id) or Object(user_id)
+
+        after = self._voice_states.get(user_id)
+        if after is None:
+            return
+        before = copy.copy(after)
+        after.speaking = speaking
+
+        self._state.dispatch('voice_state_update', member, before, after)
+
     def _update_voice_state(self, data, channel_id):
         user_id = int(data['user_id'])
         channel = self.get_channel(channel_id)
@@ -286,7 +297,7 @@ class Guild(Hashable):
         self.unavailable = guild.get('unavailable', False)
         self.id = int(guild['id'])
 
-        state = self._state # speed up attribute access
+        state = self._state
 
         for r in guild.get('roles', []):
             role = Role(guild=self, data=r, state=state)
@@ -329,8 +340,8 @@ class Guild(Hashable):
             if member is not None:
                 member._presence_update(presence, empty_tuple)
 
-        _large = None if member_count is None else member_count >= 250
-        self._large = guild.get('large', _large)
+        large = None if member_count is None else member_count >= 250
+        self._large = guild.get('large', large)
 
         self.owner_id = utils._get_as_snowflake(guild, 'owner_id')
         self.afk_channel = self.get_channel(utils._get_as_snowflake(guild, 'afk_channel_id'))
@@ -338,18 +349,24 @@ class Guild(Hashable):
         for obj in guild.get('voice_states', []):
             self._update_voice_state(obj, int(obj['channel_id']))
 
-    async def subscribe(self, delay=0.25, op_ranges=None, ticket=None, max_online=None):
+    async def subscribe(self, *, delay=0.25, op_ranges=None, ticket=None, max_online=None, channel=None):
         """|coro|
 
         Abuses the member sidebar to scrape all members*.
 
         *Discord doesn't provide offline members for "large" guilds.
         *If a guild doesn't have a channel (of any type) @everyone can view,
-        the subscribing currently fails. In the future, it'll pick the next
-        most-used role and look for a channel that role can view.
+        the subscribing currently fails.
+
+        .. note::
+            Remember that the member list is in relation to each channel, so if the channel
+            the channel subscribed to isn't one that all members can see you won't get all members.
+            It's preferable to specify your own channel.
 
         You can only request members from the sidebar in 100 member ranges, and
         you can only specify up to 2 ranges per request.
+
+        This is prone to failure in certain cases.
 
         This is a websocket operation and can be extremely slow.
 
@@ -360,6 +377,8 @@ class Guild(Hashable):
             Note: By default, we wait for the GUILD_MEMBER_LIST_UPDATE to arrive before
             continuing. However, those arrive extremely fast so we need to add an extra
             delay to try to avoid rate-limits.
+        channel: :class:`Channel`
+            The channel to subscribe to.
 
         Returns
         --------
@@ -375,7 +394,7 @@ class Guild(Hashable):
             await ticket.acquire()
 
         state = self._state
-        ws = state._get_websocket()
+        ws = state.ws
 
         def cleanup(*, successful):
             if ticket:
@@ -385,19 +404,20 @@ class Guild(Hashable):
             else:
                 del self._subscribing
 
-        def get_channel():
+        def get_channel():  # TODO: Better channel detection
             for channel in self.channels:
                 perms = channel.overwrites_for(self.default_role)
                 if perms.view_channel is None:
                     perms = self.default_role.permissions
                 if perms.view_channel:
                     return channel.id
-            return # TODO: Check for a "member" role and do the above
+            return
 
         def get_ranges():
-            online = ceil(self._online_count / 100.0) * 100
+            amount = self._online_count if self.large else self._member_count
+            ceiling = ceil(amount / 100.0) * 100
             ranges = []
-            for i in range(1, int(online / 100) + 1):
+            for i in range(1, int(ceiling / 100) + 1):
                 min = i * 100
                 max = min + 99
                 ranges.append([min, max])
@@ -412,10 +432,13 @@ class Guild(Hashable):
                 except IndexError:
                     pass
                 return current
-            except:
+            except IndexError:
                 return
 
-        channel_id = get_channel()
+        if channel:
+            channel_id = channel.id
+        else:
+            channel_id = get_channel()
         if not channel_id:
             log.warn('Guild %s subscribing failed (no channels available).' % self.id)
             cleanup(successful=False)
@@ -425,7 +448,7 @@ class Guild(Hashable):
             if int(data['guild_id']) == self.id:
                 return any((opdata.get('range') in ranges_to_send for opdata in data.get('ops', [])))
 
-        log.debug("Subscribing to [[0, 99]] ranges for guild %s." % self.id)
+        log.debug('Subscribing to [[0, 99]] ranges for guild %s.' % self.id)
         ranges_to_send = [[0, 99]]
         await ws.request_lazy_guild(self.id, channels={channel_id: ranges_to_send})
 
@@ -459,7 +482,7 @@ class Guild(Hashable):
                 cleanup(successful=True)
                 return True
 
-            log.debug("Subscribing to %s ranges for guild %s." % (ranges_to_send, self.id))
+            log.debug('Subscribing to %s ranges for guild %s.' % (ranges_to_send, self.id))
             await ws.request_lazy_guild(self.id, channels={channel_id: ranges_to_send})
 
             try:
@@ -897,14 +920,12 @@ class Guild(Hashable):
         """:class:`bool`: Returns a boolean indicating if the guild is "subscribed".
 
         A subscribed guild means that opcode 14s have been sent for every range
-        available. Note that every 100 new members, a new one has to be sent.
+        available in a channel that every member can see.
+        Note that every 100 new members, a new one has to be sent.
 
         .. versionadded:: 1.9
         """
-        try:
-            return not self._subscribing
-        except:
-            return False
+        return not getattr(self, '_subscribing', True)
 
     @property
     def created_at(self):
@@ -2361,7 +2382,7 @@ class Guild(Hashable):
         limit = min(100, limit or 5) if query else None
         return await self._state.query_members(self, query=query, limit=limit, user_ids=user_ids, presences=presences, cache=cache)
 
-    async def change_voice_state(self, *, channel, self_mute=False, self_deaf=False, self_video=None, self_stream=None, preferred_region=''):
+    async def change_voice_state(self, *, channel, self_mute=False, self_deaf=False, self_video=None, preferred_region=''):
         """|coro|
 
         Changes client's voice state in the guild.
@@ -2381,21 +2402,15 @@ class Guild(Hashable):
             (do not use).
 
             .. versionadded:: 1.9
-        self_stream :class:`bool`
-            Indicates if the client is sharing its screen via the Go Live
-            feature. Untested & unconfirmed (do not use).
-
-            .. versionadded:: 1.9
         """
 
         state = self._state
-        ws = state._get_websocket()
         channel_id = channel.id if channel else None
 
         if channel_id and preferred_region == '':
             preferred_region = state.preferred_region
 
-        await ws.voice_state(self.id, channel_id, self_mute, self_deaf, self_video, self_stream, preferred_region=str(preferred_region))
+        await state.ws.voice_state(self.id, channel_id, self_mute, self_deaf, self_video, preferred_region=str(preferred_region))
 
     async def mute(self, *, duration=None):
         """|coro|

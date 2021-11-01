@@ -252,7 +252,7 @@ class Context(discord.abc.Messageable):
     def voice_client(self):
         r"""Optional[:class:`.VoiceProtocol`]: A shortcut to :attr:`.Guild.voice_client`\, if applicable."""
         g = self.guild
-        return g.voice_client if g else None
+        return g.voice_client if g else self.bot.voice_client
 
     async def send_help(self, *args):
         """send_help(entity=<bot>)

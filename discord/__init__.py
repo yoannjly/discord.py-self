@@ -8,20 +8,20 @@ A basic wrapper for the Discord user API.
 
 :copyright: (c) 2015-present Rapptz
 :license: MIT, see LICENSE for more details.
-
 """
 
 __title__ = 'discord'
 __author__ = 'Rapptz'
 __license__ = 'MIT'
 __copyright__ = 'Copyright 2015-present Rapptz'
-__version__ = '1.9.1'
+__version__ = '1.10.0'
 
 __path__ = __import__('pkgutil').extend_path(__path__, __name__)
 
 from collections import namedtuple
 import logging
 
+from . import utils, opus, abc, auth
 from .client import Client
 from .appinfo import AppInfo
 from .user import User, ClientUser, Profile
@@ -47,11 +47,11 @@ from .template import Template
 from .widget import Widget, WidgetMember, WidgetChannel
 from .object import Object
 from .reaction import Reaction
-from . import utils, opus, abc
 from .enums import *
 from .embeds import Embed
 from .mentions import AllowedMentions
 from .player import *
+from .recorder import *
 from .webhook import *
 from .voice_client import VoiceClient, VoiceProtocol
 from .audit_logs import AuditLogChanges, AuditLogEntry, AuditLogDiff
@@ -59,8 +59,8 @@ from .raw_models import *
 from .team import *
 from .sticker import Sticker
 
-VersionInfo = namedtuple('VersionInfo', 'major minor micro releaselevel serial')
+_VersionInfo = namedtuple('VersionInfo', 'major minor micro releaselevel serial')
 
-version_info = VersionInfo(major=1, minor=9, micro=1, releaselevel='final', serial=0)
+version_info = _VersionInfo(major=1, minor=10, micro=0, releaselevel='alpha', serial=0)
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())

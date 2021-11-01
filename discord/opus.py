@@ -88,7 +88,7 @@ signal_ctl = {
 
 def _err_lt(result, func, args):
     if result < OK:
-        log.info('error has happened in %s', func.__name__)
+        log.info('Error has happened in %s.', func.__name__)
         raise OpusError(result)
     return result
 
@@ -405,7 +405,7 @@ class Decoder(_OpusStruct):
             channel_count = self.CHANNELS
         else:
             frames = self.packet_get_nb_frames(data)
-            channel_count = self.packet_get_nb_channels(data)
+            channel_count = self.CHANNELS
             samples_per_frame = self.packet_get_samples_per_frame(data)
             frame_size = frames * samples_per_frame
 

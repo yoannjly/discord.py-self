@@ -53,6 +53,7 @@ from .backoff import ExponentialBackoff
 from .webhook import Webhook
 from .iterators import GuildIterator
 from .appinfo import AppInfo
+from .auth import RemoteAuthClient
 
 log = logging.getLogger(__name__)
 
@@ -149,9 +150,14 @@ class Client:
         .. versionadded:: 1.5
     guild_subscription_options: :class:`GuildSubscriptionOptions`
         Allows for control over the library's auto-subscribing.
-        If not given, defaults to "sane values".
+        If not given, defaults to off.
 
         .. versionadded:: 1.9
+    request_guilds :class:`bool`
+        Whether to request guilds at startup (behaves similarly to the old
+        guild_subscriptions option). Defaults to True.
+
+        .. versionadded:: 1.10
     status: Optional[:class:`.Status`]
         A status to start your presence with upon logging on to Discord.
     activity: Optional[:class:`.BaseActivity`]
@@ -201,11 +207,10 @@ class Client:
             'before_identify': self._call_before_identify_hook
         }
 
-        self._connection = self._get_state(**options)
+        self._connection = state = self._get_state(**options)
+        state._get_ws = lambda: self.ws
         self._closed = False
         self._ready = asyncio.Event()
-        self._connection._get_websocket = self._get_websocket
-        self._connection._get_client = lambda: self
 
         if VoiceClient.warn_nacl:
             VoiceClient.warn_nacl = False
@@ -213,12 +218,10 @@ class Client:
 
     # internals
 
-    def _get_websocket(self):
-        return self.ws
-
     def _get_state(self, **options):
         return ConnectionState(dispatch=self.dispatch, handlers=self._handlers,
-                               hooks=self._hooks, http=self.http, loop=self.loop, **options)
+                               hooks=self._hooks, http=self.http, loop=self.loop,
+                               client=self, **options)
 
     def _handle_ready(self):
         self._ready.set()
@@ -227,7 +230,8 @@ class Client:
         state = self._connection
         activity = create_activity(state._activity)
         status = try_enum(Status, state._status)
-        self.loop.create_task(self.change_presence(activity=activity, status=status))
+        if status is not None or activity is not None:
+            self.loop.create_task(self.change_presence(activity=activity, status=status))
 
     @property
     def latency(self):
@@ -275,13 +279,7 @@ class Client:
 
     @property
     def private_channels(self):
-        """List[:class:`.abc.PrivateChannel`]: The private channels that the connected client is participating on.
-
-        .. note::
-
-            This returns only up to 128 most recent private channels due to an internal working
-            on how Discord deals with private channels.
-        """
+        """List[:class:`.abc.PrivateChannel`]: The private channels that the connected client is participating on."""
         return self._connection.private_channels
 
     @property
@@ -291,6 +289,10 @@ class Client:
         These are usually :class:`.VoiceClient` instances.
         """
         return self._connection.voice_clients
+
+    @utils.cached_property
+    def remote_auth(self):
+        return RemoteAuthClient(self, loop=self.loop)
 
     def is_ready(self):
         """:class:`bool`: Specifies if the client's internal cache is ready for use."""
@@ -388,7 +390,6 @@ class Client:
         initial: :class:`bool`
             Whether this IDENTIFY is the first initial IDENTIFY.
         """
-
         pass
 
     # login state management
@@ -400,7 +401,7 @@ class Client:
 
         .. warning::
 
-            Logging on with a user token is against the Discord
+            Logging on with a user token is unfortunately against the Discord
             `Terms of Service <https://support.discord.com/hc/en-us/articles/115002192352>`_
             and doing so might potentially get your account banned.
             Use this at your own risk.
@@ -528,12 +529,11 @@ class Client:
         if self._closed:
             return
 
-        await self.http.close()
         self._closed = True
 
         for voice in self.voice_clients:
             try:
-                await voice.disconnect()
+                await voice.disconnect(force=True)
             except Exception:
                 # if an error happens during disconnects, disregard it.
                 pass
@@ -541,6 +541,7 @@ class Client:
         if self.ws is not None and self.ws.open:
             await self.ws.close(code=1000)
 
+        await self.http.close()
         self._ready.clear()
 
     def clear(self):
@@ -568,7 +569,7 @@ class Client:
         reconnect = kwargs.pop('reconnect', True)
 
         if kwargs:
-            raise TypeError("unexpected keyword argument(s) %s" % list(kwargs.keys()))
+            raise TypeError('Unexpected keyword argument(s) %s' % list(kwargs.keys()))
 
         await self.login(*args)
         await self.connect(reconnect=reconnect)
@@ -638,6 +639,11 @@ class Client:
     def is_closed(self):
         """:class:`bool`: Indicates if the websocket connection is closed."""
         return self._closed
+
+    @property
+    def voice_client(self):
+        """Optional[:class:`VoiceProtocol`]: Returns the :class:`VoiceProtocol` associated with private calls, if any."""
+        return self._connection._get_voice_client(self.user.id)
 
     @property
     def activity(self):
@@ -964,7 +970,7 @@ class Client:
         if status:
             try:
                 await self._connection.user.edit_settings(status=status_enum)
-            except:
+            except Exception:  # Not essential to actually changing status...
                 pass
 
         for guild in self._connection.guilds:
@@ -978,6 +984,35 @@ class Client:
                 me.activities = ()
 
             me.status = status_enum
+
+    async def change_voice_state(self, *, channel, self_mute=False, self_deaf=False, self_video=None, preferred_region=''):
+        """|coro|
+
+        Changes client's voice state (meant for private channels).
+
+        .. versionadded:: 1.10
+
+        Parameters
+        -----------
+        channel: Optional[:class:`VoiceChannel`]
+            Channel the client wants to join. Use ``None`` to disconnect.
+        self_mute: :class:`bool`
+            Indicates if the client should be self-muted.
+        self_deaf: :class:`bool`
+            Indicates if the client should be self-deafened.
+        self_video :class:`bool`
+            Indicates if the client is using video. Untested & unconfirmed
+            (do not use).
+        """
+
+        state = self._connection
+        ws = self.ws
+        channel_id = channel.id if channel else None
+
+        if channel_id and preferred_region == '':
+            preferred_region = state.preferred_region
+
+        await ws.voice_state(None, channel_id, self_mute, self_deaf, self_video, preferred_region=str(preferred_region))
 
     # Guild stuff
 
@@ -1152,6 +1187,8 @@ class Client:
             raise InvalidArgument('Tried to join a guild you\'re already in.')
 
         return Guild(data=data['guild'], state=self._connection)
+
+    accept_invite = join_guild
 
     async def leave_guild(self, guild_id):
         """|coro|
@@ -1483,6 +1520,11 @@ class Client:
         -------
         :exc:`.HTTPException`
             Retreiving the notes failed.
+
+        Returns
+        --------
+        List[:class:`Note`]
+            All your notes.
         """
         state = self._connection
         data = await self.http.get_notes()
@@ -1497,6 +1539,11 @@ class Client:
         -------
         :exc:`.HTTPException`
             Retreiving the note failed.
+
+        Returns
+        --------
+        :class:`Note`
+            The note you requested.
         """
         try:
             data = await self.http.get_note(user_id)

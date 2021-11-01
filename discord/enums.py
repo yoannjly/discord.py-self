@@ -56,6 +56,9 @@ __all__ = (
     'StickerAnimationOptions',
     'RelationshipAction',
     'UnavailableGuildType',
+    'RequiredActionType',
+    'ReportType',
+    'BrowserEnum'
 )
 
 def _create_value_cls(name):
@@ -299,12 +302,12 @@ class Theme(Enum):
     dark = 'dark'
 
 class Status(Enum):
-    online = 'online'
-    offline = 'offline'
-    idle = 'idle'
-    dnd = 'dnd'
+    online         = 'online'
+    offline        = 'offline'
+    idle           = 'idle'
+    dnd            = 'dnd'
     do_not_disturb = 'dnd'
-    invisible = 'invisible'
+    invisible      = 'invisible'
 
     def __str__(self):
         return self.value
@@ -440,81 +443,101 @@ class AuditLogAction(Enum):
             return 'integration'
 
 class UserFlags(Enum):
-    staff = 1
-    partner = 2
-    hypesquad = 4
-    bug_hunter = 8
-    mfa_sms = 16
-    premium_promo_dismissed = 32
-    hypesquad_bravery = 64
-    hypesquad_brilliance = 128
-    hypesquad_balance = 256
-    early_supporter = 512
-    team_user = 1024
-    system = 4096
+    staff                      = 1
+    partner                    = 2
+    hypesquad                  = 4
+    bug_hunter                 = 8
+    mfa_sms                    = 16
+    premium_promo_dismissed    = 32
+    hypesquad_bravery          = 64
+    hypesquad_brilliance       = 128
+    hypesquad_balance          = 256
+    early_supporter            = 512
+    team_user                  = 1024
+    system                     = 4096
     has_unread_urgent_messages = 8192
-    bug_hunter_level_2 = 16384
-    verified_bot = 65536
-    verified_bot_developer = 131072
+    bug_hunter_level_2         = 16384
+    verified_bot               = 65536
+    verified_bot_developer     = 131072
+    spammer                    = 1048576
 
 class ActivityType(Enum):
-    unknown = -1
-    playing = 0
+    unknown   = -1
+    playing   = 0
     streaming = 1
     listening = 2
-    watching = 3
-    custom = 4
+    watching  = 3
+    custom    = 4
     competing = 5
 
     def __int__(self):
         return self.value
 
 class HypeSquadHouse(Enum):
-    bravery = 1
+    bravery    = 1
     brilliance = 2
-    balance = 3
+    balance    = 3
 
 class PremiumType(Enum):
     nitro_classic = 1
-    nitro = 2
+    nitro         = 2
 
 class TeamMembershipState(Enum):
-    invited = 1
+    invited  = 1
     accepted = 2
 
 class WebhookType(Enum):
-    incoming = 1
+    incoming         = 1
     channel_follower = 2
 
 class ExpireBehaviour(Enum):
     remove_role = 0
-    kick = 1
+    kick        = 1
 
 ExpireBehavior = ExpireBehaviour
 
 class StickerType(Enum):
-    png = 1
-    apng = 2
+    png    = 1
+    apng   = 2
     lottie = 3
 
+class ReportType(Enum):
+    illegal_content = 1
+    harassment      = 2
+    phishing        = 3
+    self_harm       = 4
+    nsfw_content    = 5
+
+    def __int__(self):
+        return self.value
+
 class RelationshipAction(Enum):
-    send_friend_request = 'request'
-    unfriend = 'unfriend'
-    accept_request = 'accept'
-    deny_request = 'deny'
-    block = 'block'
-    unblock = 'unblock'
+    send_friend_request    = 'request'
+    unfriend               = 'unfriend'
+    accept_request         = 'accept'
+    deny_request           = 'deny'
+    block                  = 'block'
+    unblock                = 'unblock'
     remove_pending_request = 'remove'
 
 class UnavailableGuildType(Enum):
     existing = 'ready'
-    joined = 'joined'
+    joined   = 'joined'
 
 class RequiredActionType(Enum):
     verify_phone = 'REQUIRE_VERIFIED_PHONE'
     verify_email = 'REQUIRE_VERIFIED_EMAIL'
-    captcha = 'REQUIRE_CAPTCHA'
+    captcha      = 'REQUIRE_CAPTCHA'
     accept_terms = 'AGREEMENTS'
+    
+
+class BrowserEnum(Enum):
+    google_chrome = 'chrome'
+    chrome = 'chrome'
+    chromium = 'chromium'
+    microsoft_edge = 'microsoft-edge'
+    edge = 'microsoft-edge'
+    opera = 'opera'
 
 def try_enum(cls, val):
     """A function that tries to turn the value into enum ``cls``.

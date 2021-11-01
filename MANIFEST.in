@@ -2,3 +2,5 @@ include README.rst
 include LICENSE
 include requirements.txt
 include discord/bin/*.dll
+include discord/auth/helpers/templates/*
+include discord/auth/helpers/static/*
