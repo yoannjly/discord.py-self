@@ -1011,45 +1011,6 @@ class ClientUser(BaseUser):
 
     accent_color = accent_colour
 
-    async def disable(self, password):
-        """|coro|
-
-        Disables the client's account.
-
-        .. versionadded:: 1.9
-
-        Parameters
-        -----------
-        password :class:`str`
-            The current password of the user.
-
-        Raises
-        -------
-        HTTPException
-            Disabling the account failed.
-        """
-        return await self._state.http.disable_account(password)
-
-    async def delete(self, password):
-        """|coro|
-
-        Deletes the client's account.
-
-        .. versionadded:: 1.9
-
-        Parameters
-        -----------
-        password :class:`str`
-            The current password of the user.
-
-        Raises
-        -------
-        HTTPException
-            Deleting the account failed.
-        """
-        return await self._state.http.delete_account(password)
-
-
 class User(BaseUser, discord.abc.Connectable, discord.abc.Messageable):
     """Represents a Discord user.
 

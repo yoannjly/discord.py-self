@@ -139,7 +139,7 @@ class HTTPClient:
         self.user_agent = ua = await utils._get_user_agent(self.__session)
         self.client_build_number = bn = await utils._get_build_number(self.__session)
         self.browser_version = bv = await utils._get_browser_version(self.__session)
-        log.debug('Found user agent %s (%s), build number %s.', ua, bv, bn)
+        log.info('Found user agent %s (%s), build number %s.', ua, bv, bn)
         self.super_properties = super_properties = {
             'os': 'Windows',
             'browser': 'Chrome',
@@ -199,7 +199,7 @@ class HTTPClient:
             if bucket is not None:
                 self._locks[bucket] = lock
 
-        # header creation
+        # Header creation
         headers = {
             'Accept': '*/*',
             'Accept-Encoding': 'gzip, deflate',
@@ -227,7 +227,7 @@ class HTTPClient:
         if reason:
             headers['X-Audit-Log-Reason'] = _uriquote(reason)
 
-        # header modification
+        # Header modification
         if 'json' in kwargs:
             headers['Content-Type'] = 'application/json'
             kwargs['data'] = utils.to_json(kwargs.pop('json'))
@@ -395,7 +395,7 @@ class HTTPClient:
         payload = {
             'recipients': recipients
         }
-        context_properties = ContextProperties._empty() # {}
+        context_properties = ContextProperties._from_new_group_dm()  # New Group DM button
 
         return self.request(Route('POST', '/users/@me/channels'), json=payload, context_properties=context_properties)
 
@@ -744,13 +744,13 @@ class HTTPClient:
 
     def join_guild(self, invite_id, *, guild_id, channel_id, channel_type, message_id=None):
         if message_id:
-            context_properties = ContextProperties._from_invite_embed(guild_id=guild_id, channel_id=channel_id, channel_type=channel_type, message_id=message_id) # Invite Button Embed
+            context_properties = ContextProperties._from_invite_embed(guild_id=guild_id, channel_id=channel_id, channel_type=channel_type, message_id=message_id)  # Invite Button Embed
         else:
-            context_properties = choice(( # Join Guild, Accept Invite Page
+            context_properties = choice((  # Join Guild, Accept Invite Page
                 ContextProperties._from_accept_invite_page(guild_id=guild_id, channel_id=channel_id, channel_type=channel_type),
                 ContextProperties._from_join_guild_popup(guild_id=guild_id, channel_id=channel_id, channel_type=channel_type)
             ))
-        return self.request(Route('POST', '/invites/{invite_id}', invite_id=invite_id), context_properties=context_properties)
+        return self.request(Route('POST', '/invites/{invite_id}', invite_id=invite_id), context_properties=context_properties, json={})
 
     def leave_guild(self, guild_id):
         return self.request(Route('DELETE', '/users/@me/guilds/{guild_id}', guild_id=guild_id))
@@ -837,6 +837,16 @@ class HTTPClient:
 
     def get_all_guild_channels(self, guild_id):
         return self.request(Route('GET', '/guilds/{guild_id}/channels', guild_id=guild_id))
+
+    def get_member_verification(self, guild_id, *, with_guild=False, invite=None):
+        params = {
+            'with_guild': str(with_guild).lower(),
+            'invite_code': invite
+        }
+        return self.request(Route('GET', '/guilds/{guild_id}/member-verification', guild_id=guild_id), params=params)
+
+    def accept_member_verification(self, guild_id, **payload):
+        return self.request(Route('PUT', '/guilds/{guild_id}/requests/@me', guild_id=guild_id), json=payload)
 
     def get_member(self, guild_id, member_id):
         return self.request(Route('GET', '/guilds/{guild_id}/members/{member_id}', guild_id=guild_id, member_id=member_id))
@@ -1128,7 +1138,7 @@ class HTTPClient:
         payload = {
             'nickname': nickname
         }
-        return self.request(Route('PATCH', '/users/@me/relationships/{user_id}', user_id=user_id), payload=payload)
+        return self.request(Route('PATCH', '/users/@me/relationships/{user_id}', user_id=user_id), json=payload)
 
     # Misc
 
@@ -1223,15 +1233,3 @@ class HTTPClient:
             'reason': reason
         }
         return self.request(Route('POST', '/report'), json=payload)
-
-    def disable_account(self, password):
-        payload = {
-            'password': password
-        }
-        return self.request(Route('POST', '/users/@me/disable'), json=payload)
-
-    def delete_account(self, password):
-        payload = {
-            'password': password
-        }
-        return self.request(Route('POST', '/users/@me/delete'), json=payload)
