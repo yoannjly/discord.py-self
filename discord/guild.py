@@ -404,14 +404,14 @@ class Guild(Hashable):
             else:
                 del self._subscribing
 
-        def get_channel():
+        def get_channel():  # TODO: Better channel detection
             for channel in self.channels:
                 perms = channel.overwrites_for(self.default_role)
                 if perms.view_channel is None:
                     perms = self.default_role.permissions
                 if perms.view_channel:
                     return channel.id
-            return  # TODO: Better channel detection
+            return
 
         def get_ranges():
             amount = self._online_count if self.large else self._member_count
@@ -448,7 +448,7 @@ class Guild(Hashable):
             if int(data['guild_id']) == self.id:
                 return any((opdata.get('range') in ranges_to_send for opdata in data.get('ops', [])))
 
-        log.debug("Subscribing to [[0, 99]] ranges for guild %s." % self.id)
+        log.debug('Subscribing to [[0, 99]] ranges for guild %s.' % self.id)
         ranges_to_send = [[0, 99]]
         await ws.request_lazy_guild(self.id, channels={channel_id: ranges_to_send})
 
@@ -482,7 +482,7 @@ class Guild(Hashable):
                 cleanup(successful=True)
                 return True
 
-            log.debug("Subscribing to %s ranges for guild %s." % (ranges_to_send, self.id))
+            log.debug('Subscribing to %s ranges for guild %s.' % (ranges_to_send, self.id))
             await ws.request_lazy_guild(self.id, channels={channel_id: ranges_to_send})
 
             try:

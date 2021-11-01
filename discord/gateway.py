@@ -106,7 +106,7 @@ class GatewayRatelimiter:
                 log.warning('WebSocket is ratelimited, waiting %.2f seconds', delta)
                 await asyncio.sleep(delta)
 
-class KeepAliveHandler:  # Thank you enhanced-discord.py/Gnome for converting to asyncio.Task
+class KeepAliveHandler:  # Inspired by enhanced-discord.py/Gnome
     def __init__(self, *, ws, interval=None):
         self.ws = ws
         self.interval = interval
