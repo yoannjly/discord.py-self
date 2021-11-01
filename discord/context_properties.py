@@ -52,6 +52,8 @@ class ContextProperties: # Thank you Discord-S.C.U.M
             'Login': 'eyJsb2NhdGlvbiI6IkxvZ2luIn0=',
             'Register': 'eyJsb2NhdGlvbiI6IlJlZ2lzdGVyIn0=',
             'Verify Email': 'eyJsb2NhdGlvbiI6IlZlcmlmeSBFbWFpbCJ9',
+            'New Group DM': 'eyJsb2NhdGlvbiI6Ik5ldyBHcm91cCBETSJ9',
+            'Add Friends to DM': 'eyJsb2NhdGlvbiI6IkFkZCBGcmllbmRzIHRvIERNIn0='
         }
 
         try:
@@ -107,9 +109,23 @@ class ContextProperties: # Thank you Discord-S.C.U.M
         return cls(data)
 
     @classmethod
+    def _from_new_group_dm(cls):
+        data = {
+            'location': 'New Group DM'
+        }
+        return cls(data)
+
+    @classmethod
     def _from_dm_channel(cls):
         data = {
             'location': 'DM Channel'
+        }
+        return cls(data)
+
+    @classmethod
+    def _from_add_to_dm(cls):
+        data = {
+            'location': 'Add Friends to DM'
         }
         return cls(data)
 
