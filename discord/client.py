@@ -150,9 +150,14 @@ class Client:
         .. versionadded:: 1.5
     guild_subscription_options: :class:`GuildSubscriptionOptions`
         Allows for control over the library's auto-subscribing.
-        If not given, defaults to "sane values".
+        If not given, defaults to off.
 
         .. versionadded:: 1.9
+    request_guilds :class:`bool`
+        Whether to request guilds at startup (behaves similarly to the old
+        guild_subscriptions option). Defaults to True.
+
+        .. versionadded:: 1.10
     status: Optional[:class:`.Status`]
         A status to start your presence with upon logging on to Discord.
     activity: Optional[:class:`.BaseActivity`]

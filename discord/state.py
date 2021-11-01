@@ -146,12 +146,14 @@ class ConnectionState:
 
         subscription_options = options.get('guild_subscription_options')
         if subscription_options is None:
-            subscription_options = GuildSubscriptionOptions.default()
+            subscription_options = GuildSubscriptionOptions.off()
         else:
             if not isinstance(subscription_options, GuildSubscriptionOptions):
                 raise TypeError('subscription_options parameter must be GuildSubscriptionOptions not %r' % type(subscription_options))
         self._subscription_options = subscription_options
         self._subscribe_guilds = subscription_options.auto_subscribe
+
+        self._request_guilds = options.get('request_guilds', True)
 
         cache_flags = options.get('member_cache_flags')
         if cache_flags is None:
@@ -449,7 +451,8 @@ class ConnectionState:
             states = []
             subscribes = []
             for guild in self._guilds.values():
-                await self.request_guild(guild.id)
+                if self._request_guilds:
+                    await self.request_guild(guild.id)
 
                 if self._guild_needs_chunking(guild):
                     future = await self.chunk_guild(guild, wait=False)
@@ -478,8 +481,8 @@ class ConnectionState:
             self._ready_task = None
 
     def parse_ready(self, data):
-        # Before parsing, we wait for READY_SUPPLEMENTAL.
-        # This has voice state objects, as well as an initial member cache.
+        # Before parsing, we wait for READY_SUPPLEMENTAL
+        # This has voice state objects, as well as an initial member cache
         self._ready_data = data
 
     def parse_ready_supplemental(self, data):
@@ -504,8 +507,8 @@ class ConnectionState:
             guild_data['merged_members'] = merged_me
             guild_data['merged_members'].extend(merged_members)
             guild_data['merged_presences'] = merged_presences
-            # There's also a friends key that has presence data for your friends.
-            # Parsing that would require a redesign of the Relationship class ;-;.
+            # There's also a friends key that has presence data for your friends
+            # Parsing that would require a redesign of the Relationship class ;-;
 
         # Self parsing
         self.user = user = ClientUser(state=self, data=data['user'])
@@ -677,36 +680,34 @@ class ConnectionState:
                 if reaction:
                     self.dispatch('reaction_clear_emoji', reaction)
 
-    def parse_presence_update(self, data):
-        # Testing shows that this is only sent for relationship presences,
-        # which are not currently parsed.
-        guild_id = utils._get_as_snowflake(data, 'guild_id')
-        guild = self._get_guild(guild_id)
-        if guild is None:
-            log.debug('PRESENCE_UPDATE referencing an unknown guild ID: %s. Discarding.', guild_id)
-            return
+    #def parse_presence_update(self, data):
+        #guild_id = utils._get_as_snowflake(data, 'guild_id')
+        #guild = self._get_guild(guild_id)
+        #if guild is None:
+            #log.debug('PRESENCE_UPDATE referencing an unknown guild ID: %s. Discarding.', guild_id)
+            #return
 
-        user = data['user']
-        member_id = int(user['id'])
-        member = guild.get_member(member_id)
-        flags = self.member_cache_flags
-        if member is None:
-            if 'username' not in user:
-                return
+        #user = data['user']
+        #member_id = int(user['id'])
+        #member = guild.get_member(member_id)
+        #flags = self.member_cache_flags
+        #if member is None:
+            #if 'username' not in user:
+                #return
 
-            member, old_member = Member._from_presence_update(guild=guild, data=data, state=self)
-            if flags.online or (flags._online_only and member.raw_status != 'offline'):
-                guild._add_member(member)
-        else:
-            old_member = Member._copy(member)
-            user_update = member._presence_update(data=data, user=user)
-            if user_update:
-                self.dispatch('user_update', user_update[0], user_update[1])
+            #member, old_member = Member._from_presence_update(guild=guild, data=data, state=self)
+            #if flags.online or (flags._online_only and member.raw_status != 'offline'):
+                #guild._add_member(member)
+        #else:
+            #old_member = Member._copy(member)
+            #user_update = member._presence_update(data=data, user=user)
+            #if user_update:
+                #self.dispatch('user_update', user_update[0], user_update[1])
 
-            if member.id != self.self_id and flags._online_only and member.raw_status == 'offline':
-                guild._remove_member(member)
+            #if member.id != self.self_id and flags._online_only and member.raw_status == 'offline':
+                #guild._remove_member(member)
 
-        self.dispatch('member_update', old_member, member)
+        #self.dispatch('member_update', old_member, member)
 
     def parse_user_update(self, data):
         self.user._update(data)
@@ -1046,6 +1047,9 @@ class ConnectionState:
 
         if guild is None:
             return
+
+        if self._request_guilds:
+            asyncio.ensure_future(self.request_guild(guild.id), loop=self.loop)
 
         # Chunk/subscribe if needed
         needs_chunking, needs_subscribing = self._guild_needs_chunking(guild), self._guild_needs_subscribing(guild)
