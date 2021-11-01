@@ -1,4 +1,4 @@
-from setuptools import setup
+import setuptools
 import re
 
 requirements = []
@@ -42,9 +42,10 @@ extras_require = {
     ]
 }
 
-setup(name='discord.py-self',
+setuptools.setup(name='discord.py-self',
       author='Dolfies',
       url='https://github.com/dolfies/discord.py-self',
+      packages=setuptools.find_packages(),
       project_urls={
         "Documentation": "https://dolf.ml/discord.py-self",
         "Issue tracker": "https://github.com/dolfies/discord.py-self/issues",
