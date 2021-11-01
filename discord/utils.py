@@ -733,19 +733,28 @@ class Browser:  # Inspired from https://github.com/NoahCardoza/CaptchaHarvester
         except:
             pass
 
-async def _get_build_number(session): # Thank you Discord-S.C.U.M
+async def _get_client_version(session):
+    try:
+        request = await session.get('https://discord.com/api/downloads/distributions/app/installers/latest?arch=x86&channel=stable&platform=win', headers={'Accept-Encoding': 'gzip, deflate'}, timeout=7)
+        url = request.headers['location']
+        return url.split('/')[-2]
+    except (asyncio.TimeoutError, RuntimeError):
+        log.warning('Could not fetch client version.')
+        return '1.0.9003'
+
+async def _get_build_number(session):  # Thank you Discord-S.C.U.M
     """Fetches client build number"""
     try:
-        login_page_request = await session.request('GET', 'https://discord.com/login', headers={'Accept-Encoding': 'gzip, deflate'}, timeout=10)
+        login_page_request = await session.get('https://discord.com/login', headers={'Accept-Encoding': 'gzip, deflate'}, timeout=7)
         login_page = await login_page_request.text()
         build_url = 'https://discord.com/assets/' + re.compile(r'assets/+([a-z0-9]+)\.js').findall(login_page)[-2] + '.js'
-        build_request = await session.request('GET', build_url, headers={'Accept-Encoding': 'gzip, deflate'}, timeout=10)
+        build_request = await session.get(build_url, headers={'Accept-Encoding': 'gzip, deflate'}, timeout=7)
         build_file = await build_request.text()
         build_index = build_file.find('buildNumber') + 14
         return int(build_file[build_index:build_index + 6])
     except asyncio.TimeoutError:
         log.warning('Could not fetch client build number.')
-        return 88863
+        return 103016
 
 async def _get_user_agent(session):
     """Fetches the latest Windows 10/Chrome user-agent."""
