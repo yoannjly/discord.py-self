@@ -408,7 +408,7 @@ class ConnectionState:
 
     def _guild_needs_chunking(self, guild):
         try:
-            return self._chunk_guilds and not guild.chunked and guild.me.guild_permissions.manage_guild
+            return self._chunk_guilds and not guild.chunked and any(guild.me.guild_permissions.kick_members, guild.me.guild_permissions.manage_roles, guild.me.guild_permissions.ban_members)
         except:
             return False
 
@@ -1053,19 +1053,7 @@ class ConnectionState:
 
         # Chunk/subscribe if needed
         needs_chunking, needs_subscribing = self._guild_needs_chunking(guild), self._guild_needs_subscribing(guild)
-        if needs_chunking or needs_subscribing:
-            asyncio.ensure_future(self._parse_and_dispatch(guild, chunk=needs_chunking, subscribe=needs_subscribing), loop=self.loop)
-            return
-
-        # Dispatch available/join depending on circumstances
-        if guild_id in self._unavailable_guilds:
-            type = self._unavailable_guilds.pop(guild_id)
-            if type is UnavailableGuildType.existing:
-                self.dispatch('guild_available', guild)
-            else:
-                self.dispatch('guild_join', guild)
-        else:
-            self.dispatch('guild_join', guild)
+        asyncio.ensure_future(self._parse_and_dispatch(guild, chunk=needs_chunking, subscribe=needs_subscribing), loop=self.loop)
 
     def parse_guild_update(self, data):
         guild = self._get_guild(int(data['id']))
