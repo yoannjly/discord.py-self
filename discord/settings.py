@@ -27,7 +27,9 @@ DEALINGS IN THE SOFTWARE.
 from .enums import FriendFlags, StickerAnimationOptions, Theme, UserContentFilter, try_enum
 from .guild_folder import GuildFolder
 
-class Settings:
+__all__ = {'UserSettings',}
+
+class UserSettings:
     """Represents the Discord client settings.
 
     Attributes
