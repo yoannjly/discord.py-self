@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 The MIT License (MIT)
 
@@ -23,9 +25,6 @@ DEALINGS IN THE SOFTWARE.
 """
 
 from .colour import Colour
-
-__all__ = ('GuildFolder',)
-
 
 class GuildFolder:
     __slots__ = ('_state', 'id', 'name', '_color', 'guilds')

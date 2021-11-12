@@ -590,8 +590,6 @@ class ClientUser(BaseUser):
     phone: Optional[:class:`int`]
         The phone number of the user.
 
-        .. versionadded:: 1.9
-
     locale: Optional[:class:`str`]
         The IETF language tag used to identify the language the user is using.
     mfa_enabled: :class:`bool`
@@ -600,10 +598,8 @@ class ClientUser(BaseUser):
         Specifies if the user is a premium user (i.e. has Discord Nitro).
     premium_type: Optional[:class:`PremiumType`]
         Specifies the type of premium a user has (i.e. Nitro or Nitro Classic). Could be None if the user is not premium.
-    settings: Optional[:class:`Settings`]
-        The user's client settings. Only available after connecting to the gateway.
-
-        .. versionadded:: 1.9
+    settings: :class:`Settings`
+        The user's client settings.
     note: :class:`Note`
         The user's note. Not pre-fetched.
     """
@@ -614,7 +610,7 @@ class ClientUser(BaseUser):
     def __init__(self, *, state, data):
         super().__init__(state=state, data=data)
         self._relationships = {}
-        self.note = Note(state, self.id)
+        self.note = Note(state, self.id, user=self)
         self.settings = None
 
     def __repr__(self):
