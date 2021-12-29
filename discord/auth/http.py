@@ -170,7 +170,9 @@ class AuthClient:
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Site': 'same-origin',
             'User-Agent': self.user_agent,
-            'X-Super-Properties': self.encoded_super_properties
+            'X-Super-Properties': self.encoded_super_properties,
+            'X-Debug-Options': 'bugReporterEnabled',
+            'X-Discord-Locale': 'en-US',
         }
 
         if kwargs.pop('auth', False):
@@ -294,25 +296,10 @@ class AuthClient:
         return self.request('PATCH', '/users/@me', auth=True, json=payload,
                             referer='https://discord.com/channels/@me')
 
-    def get_invite(self, invite_id):
-        params = {
-            'with_counts': 'true',
-            'with_expiration': 'true'
-        }
-        return self.request('GET', f'/invites/{invite_id}', auth=True, fingerprint=True,
-                            referer=f'https://discord.com/invite/{invite_id}', params=params)
-
     async def get_fingerprint(self, mode, *, referer=None):
         self.token = None
         if mode == 0:  # Home page
             data = await self.request('GET', '/experiments', super_properties_to_track=True)
-        elif mode == 1:  # Accept invite page
-            context_properties = ContextProperties._from_accept_invite_page_blank()
-            data = await self.request('GET', '/experiments', auth=True, context_properties=context_properties, referer=referer)
-        elif mode == 2:  # Register page
-            referer = 'https://discord.com/register'
-            context_properties = ContextProperties._from_register()
-            data = await self.request('GET', '/experiments', auth=True, context_properties=context_properties, referer=referer)
         elif mode == 3:  # Login page
             referer = 'https://discord.com/login'
             context_properties = ContextProperties._from_login()
@@ -331,113 +318,6 @@ class AuthClient:
         if referer is None:
             return self.request('GET', '/auth/location-metadata', super_properties_to_track=True)
         return self.request('GET', '/auth/location-metadata', auth=True, fingerprint=True, referer=referer)
-
-    async def register_from_invite(self, invite_id, username):
-        # Prepare environment
-        captcha_handler = self.captcha_handler
-        referer = f'https://discord.com/invite/{invite_id}'
-        fingerprint = await self.get_fingerprint(1, referer=referer)
-
-        # Get the invite (useless to us)
-        await self.get_invite(invite_id)
-
-        # Get location metadata (useless to us)
-        await self.get_location_metadata(referer)
-
-        # Construct the payload (captcha_key may be required later)
-        payload = {
-            'captcha_key': None,
-            'consent': True,
-            'fingerprint': fingerprint,
-            'gift_code_sku_id': None,
-            'invite': invite_id,
-            'username': username
-        }
-
-        for tries in range(5):
-            try:
-                data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
-                                          referer=referer, json=payload)
-            except HTTPException as exc:
-                if exc.code == 50035:
-                    raise AuthFailure(exc.text or 'Unknown error') from exc
-                elif tries == 4:
-                    raise
-                elif captcha_key := exc._text.get('captcha_key'):
-                    values = [i for i in captcha_key if i in ('incorrect-captcha', 'response-already-used', 'captcha-required')]
-                    if values is None:
-                        raise InvalidData(f'Please open an issue with this info: {exc._text.get("captcha_key")}') from exc
-                    elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
-                        raise AuthFailure('Captcha required') from exc
-                    else:
-                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text)
-                else:
-                    raise
-            else:
-                self.token = token = data['token']
-                return token
-
-            data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
-                                        referer=referer, json=payload)
-            self.token = token = data['token']
-            return token
-
-    async def register(self, username, email, password, dob, *, spam_mail):
-        # Prepare environment
-        captcha_handler = self.captcha_handler
-        referer = 'https://discord.com/register'
-        fingermode = choice((0, 2))
-        fingerprint = await self.get_fingerprint(fingermode)
-
-        if fingermode == 0:
-            # Get location metadata (useless to us)
-            await self.get_location_metadata()
-
-        if fingermode == 2:
-            # Get experiments (useless to us)
-            context_properties = ContextProperties._from_register()
-            await self.request('GET', '/experiments', auth=True, fingerprint=True,
-                               referer=referer, context_properties=context_properties)
-
-        # Get location metadata (useless to us)
-        await self.get_location_metadata(referer)
-
-        # Construct the payload (captcha_key may be required later)
-        payload = {
-            'captcha_key': None,
-            'consent': True,
-            'date_of_birth': dob,
-            'email': email,
-            'fingerprint': fingerprint,
-            'gift_code_sku_id': None, 
-            'invite': None,
-            'password': password,
-            'promotional_email_opt_in': spam_mail,
-            'username': username
-        }
-
-        print(payload)
-
-        for tries in range(5):
-            try:
-                data = await self.request('POST', '/auth/register', auth=True, fingerprint=True,
-                                          referer=referer, json=payload)
-            except HTTPException as exc:
-                if exc.code == 50035:
-                    raise AuthFailure(exc.text or 'Unknown error') from exc
-                elif tries == 4:
-                    raise
-                elif captcha_key := exc._text.get('captcha_key'):
-                    values = [i for i in captcha_key if i in ('incorrect-captcha', 'response-already-used', 'captcha-required')]
-                    if values is None:
-                        raise InvalidData(f'Please open an issue with this info: {exc._text.get("captcha_key")}') from exc
-                    elif captcha_handler is None:  # No captcha handler ¯\_(ツ)_/¯
-                        raise AuthFailure('Captcha required') from exc
-                    else:
-                        payload['captcha_key'] = await captcha_handler.fetch_token(exc._text)
-            else:
-                self.token = token = data['token']
-                return token
 
     async def login(self, email, password, *, undelete):
         # Prepare environment

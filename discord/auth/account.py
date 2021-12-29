@@ -27,11 +27,10 @@ import datetime
 import hashlib
 import logging
 import os
-from os.path import split as path_split
 import random
 import tempfile
 
-from discord.errors import AuthFailure, ClientException, InvalidArgument
+from discord.errors import AuthFailure, ClientException
 from discord import utils
 
 from .http import AuthClient
@@ -124,54 +123,6 @@ class Account:
     @utils.cached_slot_property('_remote_auth_client')
     def remote_auth(self):
         return RemoteAuthClient(self, loop=self.loop)
-
-    async def register(self, *args, **kwargs):
-        self._closed = False
-
-        await self.http.startup()
-
-        length = len(args)
-        if length == 1:
-            await self._unclaimed_register(*args, **kwargs)
-        if length == 2:
-            await self._claimed_register(*args, **kwargs)
-        elif length == 3:
-            await self._claimed_register(args[0], args[2], email=args[1], **kwargs)
-        else:
-            raise TypeError(f'register() takes 1-3 positional arguments but {length} were given')
-
-    async def _claimed_register(self, username, password, *, email=None, **kwargs):
-        http = self.http
-        if http.captcha_handler is not None:
-            self.loop.create_task(http.captcha_handler.prefetch_token())
-        if http.email_handler is None and email is None:
-            raise TypeError(f'register() takes 1 or 3 positional arguments but 2 were given')
-
-        dob = kwargs.get('dob', self._generate_dob())
-        spam_mail = kwargs.get('spam_mail', False)
-        email = email or await http.email_handler.generate_account()
-        print(email)
-
-        token = await http.register(username, email, password, dob.strftime('%F'), spam_mail=spam_mail)
-        data = await http.static_login(token)
-        self._ready(token, data, password=password)
-
-        if self.use_cache:
-            self._update_cache()
-
-    async def _unclaimed_register(self, username, **kwargs):
-        http = self.http
-        if http.captcha_handler:
-            self.loop.create_task(http.captcha_handler.prefetch_token())
-        invite = kwargs.get('invite')
-        if invite is None:
-            raise TypeError('register() missing 1 required keyword-only argument: \'invite\'')
-        else:
-            invite = utils.resolve_invite(invite)
-
-        token = await http.register_from_invite(invite, username)
-        data = await http.static_login(token)
-        self._ready(token, data)
 
     async def login(self, *args, **kwargs):
         self._closed = False
