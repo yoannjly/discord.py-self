@@ -41,8 +41,8 @@ if TYPE_CHECKING:
     ValidStaticFormatTypes = Literal['webp', 'jpeg', 'jpg', 'png']
     ValidAssetFormatTypes = Literal['webp', 'jpeg', 'jpg', 'png', 'gif']
 
-VALID_STATIC_FORMATS = frozenset({"jpeg", "jpg", "webp", "png"})
-VALID_ASSET_FORMATS = VALID_STATIC_FORMATS | {"gif"}
+VALID_STATIC_FORMATS = frozenset({'jpeg', 'jpg', 'webp', 'png'})
+VALID_ASSET_FORMATS = VALID_STATIC_FORMATS | {'gif'}
 
 
 MISSING = utils.MISSING
@@ -244,6 +244,15 @@ class Asset(AssetMixin):
             url=f'{cls.BASE}/banners/{user_id}/{banner_hash}.{format}?size=512',
             key=banner_hash,
             animated=animated
+        )
+
+    @classmethod
+    def _from_channel_banner(cls, state, channel_id: int, banner_hash: str) -> Asset:
+        return cls(
+            state,
+            url=f'{cls.BASE}/channels/{channel_id}/banners/{banner_hash}.png?size=512',
+            key=banner_hash,
+            animated=False
         )
 
     @classmethod

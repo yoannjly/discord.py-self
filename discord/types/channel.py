@@ -64,6 +64,7 @@ class _TextChannelOptional(TypedDict, total=False):
     last_pin_timestamp: str
     rate_limit_per_user: int
     default_auto_archive_duration: ThreadArchiveDuration
+    banner: Optional[str]
 
 
 class TextChannel(_BaseGuildChannel, _TextChannelOptional):

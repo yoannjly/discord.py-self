@@ -158,6 +158,7 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         '_type',
         'last_message_id',
         'default_auto_archive_duration',
+        '_banner',
     )
 
     def __init__(self, *, state: ConnectionState, guild: Guild, data: TextChannelPayload):
@@ -185,11 +186,11 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
         self.topic: Optional[str] = data.get('topic')
         self.position: int = data['position']
         self.nsfw: bool = data.get('nsfw', False)
-        # Does this need coercion into `int`? No idea yet.
         self.slowmode_delay: int = data.get('rate_limit_per_user', 0)
         self.default_auto_archive_duration: ThreadArchiveDuration = data.get('default_auto_archive_duration', 1440)
         self._type: int = data.get('type', self._type)
         self.last_message_id: Optional[int] = utils._get_as_snowflake(data, 'last_message_id')
+        self._banner: Optional[str] = data.get('banner')
         self._fill_overwrites(data)
 
     async def _get_channel(self):
@@ -254,6 +255,16 @@ class TextChannel(discord.abc.Messageable, discord.abc.GuildChannel, Hashable):
             The last message in this channel or ``None`` if not found.
         """
         return self._state._get_message(self.last_message_id) if self.last_message_id else None
+
+    @property
+    def banner(self) -> Optional[Asset]:
+        """Optional[:class:`Asset`]: Returns the channel's banner asset if available.
+
+        .. versionadded:: 2.0
+        """
+        if self._banner is None:
+            return None
+        return Asset._from_channel_banner(self._state, self.id, self._banner)
 
     @overload
     async def edit(
