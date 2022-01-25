@@ -10,6 +10,8 @@ discord.py-self
 
 A modern, easy to use, feature-rich, and async ready API wrapper for Discord's user API written in Python.
 
+Development is currently happening on the rebase branch.
+
 Fork Changes
 ------------
 
