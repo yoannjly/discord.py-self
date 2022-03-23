@@ -10,7 +10,7 @@ discord.py-self
 
 A modern, easy to use, feature-rich, and async ready API wrapper for Discord's user API written in Python.
 
-Development is currently happening on the rebase branch.
+Development is currently happening on the master branch.
 
 Fork Changes
 ------------
@@ -63,7 +63,7 @@ To install the development version, do the following (not recommended):
 
 .. code:: sh
 
-    $ git clone --single-branch --branch development https://github.com/dolfies/discord.py-self
+    $ git clone https://github.com/dolfies/discord.py-self
     $ cd discord.py-self
     $ python3 -m pip install -U .[voice]
 
