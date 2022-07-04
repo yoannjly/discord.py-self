@@ -2,7 +2,7 @@
 
 """
 
-Tests for discord.utils
+Tests for selfcord.utils
 
 """
 
@@ -16,7 +16,7 @@ import typing
 
 import pytest
 
-from discord import utils
+from selfcord import utils
 
 
 # Async generator for async support
