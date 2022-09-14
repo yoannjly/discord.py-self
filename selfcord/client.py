@@ -1937,6 +1937,9 @@ class Client:
             Revoking the invite failed.
 
         Returns
+        --------
+        :class:`.Invite`
+            The deleted invite.
         """
         resolved = utils.resolve_invite(invite)
         state = self._connection
