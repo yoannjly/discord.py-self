@@ -1723,7 +1723,9 @@ class HTTPClient:
         }
         props = ContextProperties._from_group_dm_invite()
 
-        return self.request(Route('POST', '/channels/{channel_id}/invites', channel_id=channel_id), json=payload, context_properties=props)
+        return self.request(
+            Route('POST', '/channels/{channel_id}/invites', channel_id=channel_id), json=payload, context_properties=props
+        )
 
     def create_friend_invite(self) -> Response[invite.Invite]:
         return self.request(Route('POST', '/users/@me/invites'), json={}, context_properties=ContextProperties._empty())
