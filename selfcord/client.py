@@ -54,7 +54,7 @@ from .widget import Widget
 from .guild import Guild
 from .emoji import Emoji
 from .channel import _private_channel_factory, _threaded_channel_factory, GroupChannel, PartialMessageable
-from .enums import ActivityType, ChannelType, ConnectionLinkType, ConnectionType, Status, InviteType, try_enum
+from .enums import ActivityType, ChannelType, ConnectionLinkType, ConnectionType, Status, try_enum
 from .mentions import AllowedMentions
 from .errors import *
 from .enums import Status
