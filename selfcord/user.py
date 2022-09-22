@@ -580,7 +580,7 @@ class ClientUser(BaseUser):
         self.mfa_enabled = data.get('mfa_enabled', False)
         self.premium_type = try_enum(PremiumType, data['premium_type']) if 'premium_type' in data else None
         self.bio = data.get('bio')
-        self.nsfw_allowed = data.get('nsfw_allowed', False)
+        self.nsfw_allowed = data.get('nsfw_allowed')
 
     def get_relationship(self, user_id: int) -> Optional[Relationship]:
         """Retrieves the :class:`Relationship` if applicable.
