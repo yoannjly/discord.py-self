@@ -2764,7 +2764,10 @@ class Guild(Hashable):
         """
         state = self._state
         data = await state.http.get_top_emojis(self.id)
-        return [self._state.get_emoji(int(e['emoji_id'])) or PartialEmoji.with_state(state, name='', id=int(e['emoji_id'])) for e in data['items']]
+        return [
+            self._state.get_emoji(int(e['emoji_id'])) or PartialEmoji.with_state(state, name='', id=int(e['emoji_id']))
+            for e in data['items']
+        ]
 
     async def fetch_emojis(self) -> List[Emoji]:
         r"""|coro|
