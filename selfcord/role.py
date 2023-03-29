@@ -66,22 +66,33 @@ class RoleTags:
         The bot's user ID that manages this role.
     integration_id: Optional[:class:`int`]
         The integration ID that manages the role.
+    subscription_listing_id: Optional[:class:`int`]
+        The ID of this role's subscription SKU and listing.
+
+        .. versionadded:: 2.0
     """
 
     __slots__ = (
         'bot_id',
         'integration_id',
         '_premium_subscriber',
+        '_available_for_purchase',
+        'subscription_listing_id',
+        '_guild_connections',
     )
 
     def __init__(self, data: RoleTagPayload):
         self.bot_id: Optional[int] = _get_as_snowflake(data, 'bot_id')
         self.integration_id: Optional[int] = _get_as_snowflake(data, 'integration_id')
+        self.subscription_listing_id: Optional[int] = _get_as_snowflake(data, 'subscription_listing_id')
+
         # NOTE: The API returns "null" for this if it's valid, which corresponds to None.
         # This is different from other fields where "null" means "not there".
         # So in this case, a value of None is the same as True.
         # Which means we would need a different sentinel.
-        self._premium_subscriber: Optional[Any] = data.get('premium_subscriber', MISSING)
+        self._premium_subscriber: bool = data.get('premium_subscriber', MISSING) is None
+        self._available_for_purchase: bool = data.get('available_for_purchase', MISSING) is None
+        self._guild_connections: bool = data.get('guild_connections', MISSING) is None
 
     def is_bot_managed(self) -> bool:
         """:class:`bool`: Whether the role is associated with a bot."""
@@ -89,11 +100,25 @@ class RoleTags:
 
     def is_premium_subscriber(self) -> bool:
         """:class:`bool`: Whether the role is the premium subscriber, AKA "boost", role for the guild."""
-        return self._premium_subscriber is None
+        return self._premium_subscriber
 
     def is_integration(self) -> bool:
         """:class:`bool`: Whether the role is managed by an integration."""
         return self.integration_id is not None
+
+    def is_available_for_purchase(self) -> bool:
+        """:class:`bool`: Whether the role is available for purchase.
+
+        .. versionadded:: 2.0
+        """
+        return self._available_for_purchase
+
+    def is_guild_connection(self) -> bool:
+        """:class:`bool`: Whether the role is a guild's linked role.
+
+        .. versionadded:: 2.0
+        """
+        return self._guild_connections
 
     def __repr__(self) -> str:
         return (
@@ -227,7 +252,7 @@ class Role(Hashable):
             return True
 
         if self.position == other.position:
-            return int(self.id) > int(other.id)
+            return self.id > other.id
 
         return False
 
@@ -350,7 +375,7 @@ class Role(Hashable):
     @property
     def members(self) -> List[Member]:
         """List[:class:`Member`]: Returns all the members with this role."""
-        all_members = self.guild.members
+        all_members = list(self.guild._members.values())
         if self.is_default():
             return all_members
 
@@ -423,8 +448,8 @@ class Role(Hashable):
 
         Adds a number of :class:`Member`\s to this role.
 
-        You must have the :attr:`~Permissions.manage_roles` permission to
-        use this, and the current :class:`Role` must appear lower in the list
+        You must have :attr:`~Permissions.manage_roles` to use this,
+        and the current :class:`Role` must appear lower in the list
         of roles than the highest role of the member.
 
         Parameters
@@ -465,8 +490,8 @@ class Role(Hashable):
 
         Removes :class:`Member`\s from this role.
 
-        You must have the :attr:`~Permissions.manage_roles` permission to
-        use this, and the current :class:`Role` must appear lower in the list
+        You must have :attr:`~Permissions.manage_roles` to use this,
+        and the current :class:`Role` must appear lower in the list
         of roles than the highest role of the member.
 
         Parameters
@@ -514,8 +539,7 @@ class Role(Hashable):
 
         Edits the role.
 
-        You must have the :attr:`~Permissions.manage_roles` permission to
-        use this.
+        You must have :attr:`~Permissions.manage_roles` to do this.
 
         All fields are optional.
 
@@ -638,8 +662,7 @@ class Role(Hashable):
 
         Deletes the role.
 
-        You must have the :attr:`~Permissions.manage_roles` permission to
-        use this.
+        You must have :attr:`~Permissions.manage_roles` to do this.
 
         Parameters
         -----------

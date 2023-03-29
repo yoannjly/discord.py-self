@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 __all__ = (
     'CommandError',
     'MissingRequiredArgument',
+    'MissingRequiredAttachment',
     'BadArgument',
     'PrivateMessageOnly',
     'NoPrivateMessage',
@@ -100,6 +101,7 @@ __all__ = (
     'MissingFlagArgument',
     'TooManyFlags',
     'MissingRequiredFlag',
+    'RangeError',
 )
 
 
@@ -181,6 +183,25 @@ class MissingRequiredArgument(UserInputError):
         super().__init__(f'{param.name} is a required argument that is missing.')
 
 
+class MissingRequiredAttachment(UserInputError):
+    """Exception raised when parsing a command and a parameter
+    that requires an attachment is not given.
+
+    This inherits from :exc:`UserInputError`
+
+    .. versionadded:: 2.0
+
+    Attributes
+    -----------
+    param: :class:`Parameter`
+        The argument that is missing an attachment.
+    """
+
+    def __init__(self, param: Parameter) -> None:
+        self.param: Parameter = param
+        super().__init__(f'{param.name} is a required argument that is missing an attachment.')
+
+
 class TooManyArguments(UserInputError):
     """Exception raised when the command was passed too many arguments and its
     :attr:`.Command.ignore_extra` attribute was not set to ``True``.
@@ -225,9 +246,9 @@ class CheckAnyFailure(CheckFailure):
         A list of check predicates that failed.
     """
 
-    def __init__(self, checks: List[CheckFailure], errors: List[Callable[[Context[BotT]], bool]]) -> None:
-        self.checks: List[CheckFailure] = checks
-        self.errors: List[Callable[[Context[BotT]], bool]] = errors
+    def __init__(self, checks: List[Callable[[Context[BotT]], bool]], errors: List[CheckFailure]) -> None:
+        self.checks: List[Callable[[Context[BotT]], bool]] = checks
+        self.errors: List[CheckFailure] = errors
         super().__init__('You do not have permission to run this command.')
 
 
@@ -455,6 +476,11 @@ class BadInviteArgument(BadArgument):
     This inherits from :exc:`BadArgument`
 
     .. versionadded:: 1.5
+
+    Attributes
+    -----------
+    argument: :class:`str`
+        The invite supplied by the caller that was not valid
     """
 
     def __init__(self, argument: str) -> None:
@@ -551,6 +577,52 @@ class BadBoolArgument(BadArgument):
     def __init__(self, argument: str) -> None:
         self.argument: str = argument
         super().__init__(f'{argument} is not a recognised boolean option')
+
+
+class RangeError(BadArgument):
+    """Exception raised when an argument is out of range.
+
+    This inherits from :exc:`BadArgument`
+
+    .. versionadded:: 2.0
+
+    Attributes
+    -----------
+    minimum: Optional[Union[:class:`int`, :class:`float`]]
+        The minimum value expected or ``None`` if there wasn't one
+    maximum: Optional[Union[:class:`int`, :class:`float`]]
+        The maximum value expected or ``None`` if there wasn't one
+    value: Union[:class:`int`, :class:`float`, :class:`str`]
+        The value that was out of range.
+    """
+
+    def __init__(
+        self,
+        value: Union[int, float, str],
+        minimum: Optional[Union[int, float]],
+        maximum: Optional[Union[int, float]],
+    ) -> None:
+        self.value: Union[int, float, str] = value
+        self.minimum: Optional[Union[int, float]] = minimum
+        self.maximum: Optional[Union[int, float]] = maximum
+
+        label: str = ''
+        if minimum is None and maximum is not None:
+            label = f'no more than {maximum}'
+        elif minimum is not None and maximum is None:
+            label = f'not less than {minimum}'
+        elif maximum is not None and minimum is not None:
+            label = f'between {minimum} and {maximum}'
+
+        if label and isinstance(value, str):
+            label += ' characters'
+            count = len(value)
+            if count == 1:
+                value = '1 character'
+            else:
+                value = f'{count} characters'
+
+        super().__init__(f'value must be {label} but received {value}')
 
 
 class DisabledCommand(CommandError):
@@ -846,12 +918,17 @@ class BadLiteralArgument(UserInputError):
         A tuple of values compared against in conversion, in order of failure.
     errors: List[:class:`CommandError`]
         A list of errors that were caught from failing the conversion.
+    argument: :class:`str`
+        The argument's value that failed to be converted. Defaults to an empty string.
+
+        .. versionadded:: 2.0
     """
 
-    def __init__(self, param: Parameter, literals: Tuple[Any, ...], errors: List[CommandError]) -> None:
+    def __init__(self, param: Parameter, literals: Tuple[Any, ...], errors: List[CommandError], argument: str = "") -> None:
         self.param: Parameter = param
         self.literals: Tuple[Any, ...] = literals
         self.errors: List[CommandError] = errors
+        self.argument: str = argument
 
         to_string = [repr(l) for l in literals]
         if len(to_string) > 2:
@@ -1077,14 +1154,22 @@ class BadFlagArgument(FlagError):
     -----------
     flag: :class:`~selfcord.ext.commands.Flag`
         The flag that failed to convert.
+    argument: :class:`str`
+        The argument supplied by the caller that was not able to be converted.
+    original: :class:`Exception`
+        The original exception that was raised. You can also get this via
+        the ``__cause__`` attribute.
     """
 
-    def __init__(self, flag: Flag) -> None:
+    def __init__(self, flag: Flag, argument: str, original: Exception) -> None:
         self.flag: Flag = flag
         try:
             name = flag.annotation.__name__
         except AttributeError:
             name = flag.annotation.__class__.__name__
+
+        self.argument: str = argument
+        self.original: Exception = original
 
         super().__init__(f'Could not convert to {name!r} for flag {flag.name!r}')
 

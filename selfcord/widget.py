@@ -121,7 +121,7 @@ class WidgetMember(BaseUser):
 
         .. describe:: str(x)
 
-            Returns the widget member's `name#discriminator`.
+            Returns the widget member's ``name#discriminator``.
 
     Attributes
     -----------
@@ -150,13 +150,9 @@ class WidgetMember(BaseUser):
     """
 
     __slots__ = (
-        'name',
         'status',
         'nick',
         'avatar',
-        'discriminator',
-        'id',
-        'bot',
         'activity',
         'deafened',
         'suppress',
@@ -228,7 +224,7 @@ class Widget:
         The guild's name.
     channels: List[:class:`WidgetChannel`]
         The accessible voice channels in the guild.
-    members: List[:class:`Member`]
+    members: List[:class:`WidgetMember`]
         The online members in the guild. Offline members
         do not appear in the widget.
 

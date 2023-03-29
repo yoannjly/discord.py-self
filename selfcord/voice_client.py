@@ -44,7 +44,7 @@ import socket
 import logging
 import struct
 import threading
-from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple, Union
+from typing import Any, Callable, List, Optional, TYPE_CHECKING, Tuple
 
 from . import opus, utils
 from .backoff import ExponentialBackoff
@@ -59,7 +59,6 @@ if TYPE_CHECKING:
     from .state import ConnectionState
     from .user import ClientUser
     from .opus import Encoder
-    from .channel import StageChannel, VoiceChannel, DMChannel, GroupChannel
     from . import abc
 
     from .types.voice import (
@@ -68,7 +67,7 @@ if TYPE_CHECKING:
         SupportedModes,
     )
 
-    VocalChannel = Union[VoiceChannel, StageChannel, DMChannel, GroupChannel]
+    VocalChannel = abc.VocalChannel
 
 
 has_nacl: bool
@@ -115,7 +114,7 @@ class VoiceProtocol:
         self.client: Client = client
         self.channel: VocalChannel = channel
 
-    async def on_voice_state_update(self, data: GuildVoiceStatePayload) -> None:
+    async def on_voice_state_update(self, data: GuildVoiceStatePayload, /) -> None:
         """|coro|
 
         An abstract method that is called when the client's voice state
@@ -124,15 +123,11 @@ class VoiceProtocol:
         Parameters
         ------------
         data: :class:`dict`
-            The raw `voice state payload`__.
-
-            .. _voice_state_update_payload: https://discord.com/developers/docs/resources/voice#voice-state-object
-
-            __ voice_state_update_payload_
+            The raw :ddocs:`voice state payload <resources/voice#voice-state-object>`.
         """
         raise NotImplementedError
 
-    async def on_voice_server_update(self, data: VoiceServerUpdatePayload) -> None:
+    async def on_voice_server_update(self, data: VoiceServerUpdatePayload, /) -> None:
         """|coro|
 
         An abstract method that is called when initially connecting to voice.
@@ -141,15 +136,11 @@ class VoiceProtocol:
         Parameters
         ------------
         data: :class:`dict`
-            The raw `voice server update payload`__.
-
-            .. _voice_server_update_payload: https://discord.com/developers/docs/topics/gateway#voice-server-update-voice-server-update-event-fields
-
-            __ voice_server_update_payload_
+            The raw :ddocs:`voice server update payload <topics/gateway#voice-server-update>`.
         """
         raise NotImplementedError
 
-    async def connect(self, *, timeout: float, reconnect: bool) -> None:
+    async def connect(self, *, timeout: float, reconnect: bool, self_deaf: bool = False, self_mute: bool = False) -> None:
         """|coro|
 
         An abstract method called when the client initiates the connection request.
@@ -169,6 +160,14 @@ class VoiceProtocol:
             The timeout for the connection.
         reconnect: :class:`bool`
             Whether reconnection is expected.
+        self_mute: :class:`bool`
+            Indicates if the client should be self-muted.
+
+            .. versionadded:: 2.0
+        self_deaf: :class:`bool`
+            Indicates if the client should be self-deafened.
+
+            .. versionadded:: 2.0
         """
         raise NotImplementedError
 
@@ -307,7 +306,7 @@ class VoiceClient(VoiceProtocol):
 
     async def on_voice_server_update(self, data: VoiceServerUpdatePayload) -> None:
         if self._voice_server_complete.is_set():
-            _log.info('Ignoring extraneous voice server update.')
+            _log.warning('Ignoring extraneous voice server update.')
             return
 
         self.token = data['token']
@@ -339,12 +338,12 @@ class VoiceClient(VoiceProtocol):
 
         self._voice_server_complete.set()
 
-    async def voice_connect(self) -> None:
+    async def voice_connect(self, self_deaf: bool = False, self_mute: bool = False) -> None:
         channel = self.channel
         if self.guild:
-            await self.guild.change_voice_state(channel=channel)
+            await self.guild.change_voice_state(channel=channel, self_deaf=self_deaf, self_mute=self_mute)
         else:
-            await self._state.client.change_voice_state(channel=channel)
+            await self._state.client.change_voice_state(channel=channel, self_deaf=self_deaf, self_mute=self_mute)
 
     async def voice_disconnect(self) -> None:
         guild = self.guild
@@ -379,7 +378,7 @@ class VoiceClient(VoiceProtocol):
         self._connected.set()
         return ws
 
-    async def connect(self, *, reconnect: bool, timeout: float) -> None:
+    async def connect(self, *, reconnect: bool, timeout: float, self_deaf: bool = False, self_mute: bool = False) -> None:
         _log.info('Connecting to voice...')
         self.timeout = timeout
 
@@ -393,7 +392,7 @@ class VoiceClient(VoiceProtocol):
             ]
 
             # Start the connection flow
-            await self.voice_connect()
+            await self.voice_connect(self_deaf=self_deaf, self_mute=self_mute)
 
             try:
                 await utils.sane_wait_for(futures, timeout=timeout)
@@ -587,7 +586,10 @@ class VoiceClient(VoiceProtocol):
 
         If an error happens while the audio player is running, the exception is
         caught and the audio player is then stopped.  If no after callback is
-        passed, any caught exception will be displayed as if it were raised.
+        passed, any caught exception will be logged using the library logger.
+
+        .. versionchanged:: 2.0
+            Instead of writing to ``sys.stderr``, the library's logger is used.
 
         Parameters
         -----------

@@ -26,6 +26,7 @@ from typing import List, Literal, Optional, TypedDict, Union
 from typing_extensions import NotRequired, Required
 
 from .activity import Activity, ClientStatus, PartialPresenceUpdate, StatusType
+from .automod import AutoModerationAction, AutoModerationRuleTriggerType
 from .voice import GuildVoiceState
 from .integration import BaseIntegration, IntegrationApplication
 from .role import Role
@@ -47,6 +48,7 @@ from .subscriptions import PremiumGuildSubscriptionSlot
 from .payments import Payment
 from .entitlements import Entitlement, GatewayGift
 from .library import LibraryApplication
+from .audit_log import AuditLogEntry
 
 
 class UserPresenceUpdateEvent(TypedDict):
@@ -102,6 +104,7 @@ class ReadyEvent(ResumedEvent):
     pending_payments: NotRequired[List[Payment]]
     private_channels: List[Union[DMChannel, GroupDMChannel]]
     relationships: List[Relationship]
+    resume_gateway_url: str
     required_action: NotRequired[str]
     sessions: List[Session]
     session_id: str
@@ -275,6 +278,7 @@ class GuildMemberUpdateEvent(TypedDict):
     user: PartialUser
     avatar: Optional[str]
     joined_at: Optional[str]
+    flags: int
     nick: NotRequired[str]
     premium_since: NotRequired[Optional[str]]
     deaf: NotRequired[bool]
@@ -463,3 +467,21 @@ class ProtoSettingsEvent(TypedDict):
 
 class RecentMentionDeleteEvent(TypedDict):
     message_id: Snowflake
+
+
+class AutoModerationActionExecution(TypedDict):
+    guild_id: Snowflake
+    action: AutoModerationAction
+    rule_id: Snowflake
+    rule_trigger_type: AutoModerationRuleTriggerType
+    user_id: Snowflake
+    channel_id: NotRequired[Snowflake]
+    message_id: NotRequired[Snowflake]
+    alert_system_message_id: NotRequired[Snowflake]
+    content: str
+    matched_keyword: Optional[str]
+    matched_content: Optional[str]
+
+
+class GuildAuditLogEntryCreate(AuditLogEntry):
+    guild_id: Snowflake

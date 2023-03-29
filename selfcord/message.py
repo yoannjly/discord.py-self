@@ -76,9 +76,11 @@ if TYPE_CHECKING:
     from .types.message import (
         Message as MessagePayload,
         Attachment as AttachmentPayload,
-        MessageReference as MessageReferencePayload,
         BaseApplication as MessageApplicationPayload,
+        Call as CallPayload,
+        MessageReference as MessageReferencePayload,
         MessageActivity as MessageActivityPayload,
+        RoleSubscriptionData as RoleSubscriptionDataPayload,
     )
 
     from .types.interactions import MessageInteraction as MessageInteractionPayload
@@ -94,14 +96,14 @@ if TYPE_CHECKING:
     from .types.gateway import MessageReactionRemoveEvent, MessageUpdateEvent
     from .abc import Snowflake
     from .abc import GuildChannel, MessageableChannel
-    from .components import ActionRow
+    from .components import ActionRow, ActionRowChildComponentType
     from .state import ConnectionState
-    from .channel import TextChannel
     from .mentions import AllowedMentions
     from .user import User
     from .role import Role
 
     EmojiInputType = Union[Emoji, PartialEmoji, str]
+    MessageComponentType = Union[ActionRow, ActionRowChildComponentType]
 
 
 __all__ = (
@@ -110,6 +112,7 @@ __all__ = (
     'PartialMessage',
     'MessageReference',
     'DeletedReferencedMessage',
+    'RoleSubscriptionInfo',
 )
 
 
@@ -308,7 +311,14 @@ class Attachment(Hashable):
         data = await self._http.get_from_cdn(url)
         return data
 
-    async def to_file(self, *, use_cached: bool = False, spoiler: bool = False) -> File:
+    async def to_file(
+        self,
+        *,
+        filename: Optional[str] = MISSING,
+        description: Optional[str] = MISSING,
+        use_cached: bool = False,
+        spoiler: bool = False,
+    ) -> File:
         """|coro|
 
         Converts the attachment into a :class:`File` suitable for sending via
@@ -318,6 +328,16 @@ class Attachment(Hashable):
 
         Parameters
         -----------
+        filename: Optional[:class:`str`]
+            The filename to use for the file. If not specified then the filename
+            of the attachment is used instead.
+
+            .. versionadded:: 2.0
+        description: Optional[:class:`str`]
+            The description to use for the file. If not specified then the
+            description of the attachment is used instead.
+
+            .. versionadded:: 2.0
         use_cached: :class:`bool`
             Whether to use :attr:`proxy_url` rather than :attr:`url` when downloading
             the attachment. This will allow attachments to be saved after deletion
@@ -348,7 +368,9 @@ class Attachment(Hashable):
         """
 
         data = await self.read(use_cached=use_cached)
-        return File(io.BytesIO(data), filename=self.filename, description=self.description, spoiler=spoiler)
+        file_filename = filename if filename is not MISSING else self.filename
+        file_description = description if description is not MISSING else self.description
+        return File(io.BytesIO(data), filename=file_filename, description=file_description, spoiler=spoiler)
 
     def to_dict(self) -> AttachmentPayload:
         result: AttachmentPayload = {
@@ -453,7 +475,7 @@ class MessageReference:
     def with_state(cls, state: ConnectionState, data: MessageReferencePayload) -> Self:
         self = cls.__new__(cls)
         self.message_id = utils._get_as_snowflake(data, 'message_id')
-        self.channel_id = int(data.pop('channel_id'))
+        self.channel_id = int(data['channel_id'])
         self.guild_id = utils._get_as_snowflake(data, 'guild_id')
         self.fail_if_not_exists = data.get('fail_if_not_exists', True)
         self._state = state
@@ -534,6 +556,39 @@ def flatten_handlers(cls: Type[Message]) -> Type[Message]:
     return cls
 
 
+class RoleSubscriptionInfo:
+    """Represents a message's role subscription information.
+
+    This is currently only attached to messages of type :attr:`MessageType.role_subscription_purchase`.
+
+    .. versionadded:: 2.0
+
+    Attributes
+    -----------
+    role_subscription_listing_id: :class:`int`
+        The ID of the SKU and listing that the user is subscribed to.
+    tier_name: :class:`str`
+        The name of the tier that the user is subscribed to.
+    total_months_subscribed: :class:`int`
+        The cumulative number of months that the user has been subscribed for.
+    is_renewal: :class:`bool`
+        Whether this notification is for a renewal rather than a new purchase.
+    """
+
+    __slots__ = (
+        'role_subscription_listing_id',
+        'tier_name',
+        'total_months_subscribed',
+        'is_renewal',
+    )
+
+    def __init__(self, data: RoleSubscriptionDataPayload) -> None:
+        self.role_subscription_listing_id: int = int(data['role_subscription_listing_id'])
+        self.tier_name: str = data['tier_name']
+        self.total_months_subscribed: int = data['total_months_subscribed']
+        self.is_renewal: bool = data['is_renewal']
+
+
 class PartialMessage(Hashable):
     """Represents a partial message to aid with working messages when only
     a message and channel ID are present.
@@ -543,6 +598,7 @@ class PartialMessage(Hashable):
 
     - :meth:`TextChannel.get_partial_message`
     - :meth:`VoiceChannel.get_partial_message`
+    - :meth:`StageChannel.get_partial_message`
     - :meth:`Thread.get_partial_message`
     - :meth:`DMChannel.get_partial_message`
 
@@ -566,7 +622,7 @@ class PartialMessage(Hashable):
 
     Attributes
     -----------
-    channel: Union[:class:`PartialMessageable`, :class:`TextChannel`, :class:`VoiceChannel`, :class:`Thread`, :class:`DMChannel`]
+    channel: Union[:class:`PartialMessageable`, :class:`TextChannel`, :class:`StageChannel`, :class:`VoiceChannel`, :class:`Thread`, :class:`DMChannel`]
         The channel associated with this partial message.
     id: :class:`int`
         The message ID.
@@ -580,6 +636,7 @@ class PartialMessage(Hashable):
         if not isinstance(channel, PartialMessageable) and channel.type not in (
             ChannelType.text,
             ChannelType.voice,
+            ChannelType.stage_voice,
             ChannelType.news,
             ChannelType.private,
             ChannelType.news_thread,
@@ -587,7 +644,7 @@ class PartialMessage(Hashable):
             ChannelType.private_thread,
         ):
             raise TypeError(
-                f'expected PartialMessageable, TextChannel, VoiceChannel, DMChannel or Thread not {type(channel)!r}'
+                f'expected PartialMessageable, TextChannel, StageChannel, VoiceChannel, DMChannel or Thread not {type(channel)!r}'
             )
 
         self.channel: MessageableChannel = channel
@@ -647,8 +704,7 @@ class PartialMessage(Hashable):
         Deletes the message.
 
         Your own messages could be deleted without any proper permissions. However to
-        delete other people's messages, you need the :attr:`~Permissions.manage_messages`
-        permission.
+        delete other people's messages, you must have :attr:`~Permissions.manage_messages`.
 
         .. versionchanged:: 1.1
             Added the new ``delay`` keyword-only parameter.
@@ -771,14 +827,14 @@ class PartialMessage(Hashable):
         else:
             previous_allowed_mentions = None
 
-        params = handle_message_parameters(
+        with handle_message_parameters(
             content=content,
             attachments=attachments,
             allowed_mentions=allowed_mentions,
             previous_allowed_mentions=previous_allowed_mentions,
-        )
-        data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
-        message = Message(state=self._state, channel=self.channel, data=data)
+        ) as params:
+            data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
+            message = Message(state=self._state, channel=self.channel, data=data)
 
         if delete_after is not None:
             await self.delete(delay=delete_after)
@@ -788,17 +844,19 @@ class PartialMessage(Hashable):
     async def publish(self) -> None:
         """|coro|
 
-        Publishes this message to your announcement channel.
+        Publishes this message to the channel's followers.
 
-        You must have the :attr:`~Permissions.send_messages` permission to do this.
+        The message must have been sent in a news channel.
+        You must have :attr:`~Permissions.send_messages` to do this.
 
-        If the message is not your own then the :attr:`~Permissions.manage_messages`
-        permission is also needed.
+        If the message is not your own then :attr:`~Permissions.manage_messages`
+        is also needed.
 
         Raises
         -------
         Forbidden
-            You do not have the proper permissions to publish this message.
+            You do not have the proper permissions to publish this message
+            or the channel is not a news channel.
         HTTPException
             Publishing the message failed.
         """
@@ -809,7 +867,7 @@ class PartialMessage(Hashable):
 
         Pins the message.
 
-        You must have the :attr:`~Permissions.manage_messages` permission to do
+        You must have :attr:`~Permissions.manage_messages` to do
         this in a non-private channel context.
 
         Parameters
@@ -838,7 +896,7 @@ class PartialMessage(Hashable):
 
         Unpins the message.
 
-        You must have the :attr:`~Permissions.manage_messages` permission to do
+        You must have :attr:`~Permissions.manage_messages` to do
         this in a non-private channel context.
 
         Parameters
@@ -861,16 +919,16 @@ class PartialMessage(Hashable):
         # pinned exists on PartialMessage for duck typing purposes
         self.pinned = False
 
-    async def add_reaction(self, emoji: EmojiInputType, /) -> None:
+    async def add_reaction(self, emoji: Union[EmojiInputType, Reaction], /) -> None:
         """|coro|
 
         Adds a reaction to the message.
 
         The emoji may be a unicode emoji or a custom guild :class:`Emoji`.
 
-        You must have the :attr:`~Permissions.read_message_history` permission
-        to use this. If nobody else has reacted to the message using this
-        emoji, the :attr:`~Permissions.add_reactions` permission is required.
+        You must have :attr:`~Permissions.read_message_history`
+        to do this. If nobody else has reacted to the message using this
+        emoji, :attr:`~Permissions.add_reactions` is required.
 
         .. versionchanged:: 2.0
 
@@ -907,7 +965,7 @@ class PartialMessage(Hashable):
         The emoji may be a unicode emoji or a custom guild :class:`Emoji`.
 
         If the reaction is not your own (i.e. ``member`` parameter is not you) then
-        the :attr:`~Permissions.manage_messages` permission is needed.
+        :attr:`~Permissions.manage_messages` is needed.
 
         The ``member`` parameter must represent a member and meet
         the :class:`abc.Snowflake` abc.
@@ -948,7 +1006,7 @@ class PartialMessage(Hashable):
 
         The emoji may be a unicode emoji or a custom guild :class:`Emoji`.
 
-        You need the :attr:`~Permissions.manage_messages` permission to use this.
+        You must have :attr:`~Permissions.manage_messages` to do this.
 
         .. versionadded:: 1.3
 
@@ -980,7 +1038,7 @@ class PartialMessage(Hashable):
 
         Removes all the reactions from the message.
 
-        You need the :attr:`~Permissions.manage_messages` permission to use this.
+        You must have :attr:`~Permissions.manage_messages` to do this.
 
         Raises
         --------
@@ -1017,9 +1075,11 @@ class PartialMessage(Hashable):
         auto_archive_duration: :class:`int`
             The duration in minutes before a thread is automatically archived for inactivity.
             If not provided, the channel's default auto archive duration is used.
+
+            Must be one of ``60``, ``1440``, ``4320``, or ``10080``, if provided.
         slowmode_delay: Optional[:class:`int`]
             Specifies the slowmode rate limit for user in this channel, in seconds.
-            The maximum value possible is `21600`. By default no slowmode rate limit
+            The maximum value possible is ``21600``. By default no slowmode rate limit
             if this is ``None``.
         reason: Optional[:class:`str`]
             The reason for creating a new thread. Shows up on the audit log.
@@ -1164,7 +1224,7 @@ class Message(PartialMessage, Hashable):
         This is not stored long term within Discord's servers and is only used ephemerally.
     embeds: List[:class:`Embed`]
         A list of embeds the message has.
-    channel: Union[:class:`TextChannel`, :class:`VoiceChannel`, :class:`Thread`, :class:`DMChannel`, :class:`GroupChannel`]
+    channel: Union[:class:`TextChannel`, :class:`StageChannel`, :class:`VoiceChannel`, :class:`Thread`, :class:`DMChannel`, :class:`GroupChannel`]
         The :class:`TextChannel` or :class:`Thread` that the message was sent from.
         Could be a :class:`DMChannel` or :class:`GroupChannel` if it's a private message.
     call: Optional[:class:`CallMessage`]
@@ -1235,16 +1295,27 @@ class Message(PartialMessage, Hashable):
         A list of sticker items given to the message.
 
         .. versionadded:: 1.6
-    components: List[:class:`Component`]
+    components: List[Union[:class:`ActionRow`, :class:`Button`, :class:`SelectMenu`]]
         A list of components in the message.
+
+        .. versionadded:: 2.0
+    role_subscription: Optional[:class:`RoleSubscriptionInfo`]
+        The data of the role subscription purchase or renewal that prompted this
+        :attr:`MessageType.role_subscription_purchase` message.
+
+        .. versionadded:: 2.0
+    application_id: Optional[:class:`int`]
+        The application ID of the application that created this message if this
+        message was sent by an application-owned webhook or an interaction.
+
+        .. versionadded:: 2.0
+    position: Optional[:class:`int`]
+        A generally increasing integer with potentially gaps or duplicates that represents
+        the approximate position of the message in a thread.
 
         .. versionadded:: 2.0
     guild: Optional[:class:`Guild`]
         The guild that the message belongs to, if applicable.
-    application_id: Optional[:class:`int`]
-        The application that sent this message, if applicable.
-
-        .. versionadded:: 2.0
     interaction: Optional[:class:`Interaction`]
         The interaction that this message is a response to.
 
@@ -1252,7 +1323,6 @@ class Message(PartialMessage, Hashable):
     """
 
     __slots__ = (
-        '_state',
         '_edited_timestamp',
         '_cs_channel_mentions',
         '_cs_raw_mentions',
@@ -1262,9 +1332,7 @@ class Message(PartialMessage, Hashable):
         '_cs_system_content',
         'tts',
         'content',
-        'channel',
         'webhook_id',
-        'application_id',
         'mention_everyone',
         'embeds',
         'mentions',
@@ -1283,6 +1351,9 @@ class Message(PartialMessage, Hashable):
         'components',
         'call',
         'interaction',
+        'role_subscription',
+        'application_id',
+        'position',
     )
 
     if TYPE_CHECKING:
@@ -1292,6 +1363,7 @@ class Message(PartialMessage, Hashable):
         mentions: List[Union[User, Member]]
         author: Union[User, Member]
         role_mentions: List[Role]
+        components: List[MessageComponentType]
 
     def __init__(
         self,
@@ -1304,12 +1376,10 @@ class Message(PartialMessage, Hashable):
         self.id: int = int(data['id'])
         self._state: ConnectionState = state
         self.webhook_id: Optional[int] = utils._get_as_snowflake(data, 'webhook_id')
-        self.application_id: Optional[int] = utils._get_as_snowflake(data, 'application_id')
         self.reactions: List[Reaction] = [Reaction(message=self, data=d) for d in data.get('reactions', [])]
         self.attachments: List[Attachment] = [Attachment(data=a, state=self._state) for a in data['attachments']]
         self.embeds: List[Embed] = [Embed.from_dict(a) for a in data['embeds']]
         self.activity: Optional[MessageActivityPayload] = data.get('activity')
-        self.channel: MessageableChannel = channel
         self._edited_timestamp: Optional[datetime.datetime] = utils.parse_time(data['edited_timestamp'])
         self.type: MessageType = try_enum(MessageType, data['type'])
         self.pinned: bool = data['pinned']
@@ -1318,13 +1388,14 @@ class Message(PartialMessage, Hashable):
         self.tts: bool = data['tts']
         self.content: str = data['content']
         self.nonce: Optional[Union[int, str]] = data.get('nonce')
+        self.position: Optional[int] = data.get('position')
+        self.application_id: Optional[int] = utils._get_as_snowflake(data, 'application_id')
         self.stickers: List[StickerItem] = [StickerItem(data=d, state=state) for d in data.get('sticker_items', [])]
-        self.components: List[ActionRow] = [_component_factory(d, self) for d in data.get('components', [])]  # type: ignore # Will always be rows here
         self.call: Optional[CallMessage] = None
 
         try:
             # If the channel doesn't have a guild attribute, we handle that
-            self.guild = channel.guild  # type: ignore
+            self.guild = channel.guild
         except AttributeError:
             self.guild = state._get_guild(utils._get_as_snowflake(data, 'guild_id'))
 
@@ -1369,7 +1440,15 @@ class Message(PartialMessage, Hashable):
                     # The channel will be the correct type here
                     ref.resolved = self.__class__(channel=chan, data=resolved, state=state)  # type: ignore
 
-        for handler in ('author', 'member', 'mentions', 'mention_roles', 'call', 'interaction'):
+        self.role_subscription: Optional[RoleSubscriptionInfo] = None
+        try:
+            role_subscription = data['role_subscription_data']
+        except KeyError:
+            pass
+        else:
+            self.role_subscription = RoleSubscriptionInfo(role_subscription)
+
+        for handler in ('author', 'member', 'mentions', 'mention_roles', 'call', 'interaction', 'components'):
             try:
                 getattr(self, f'_handle_{handler}')(data[handler])
             except KeyError:
@@ -1544,7 +1623,7 @@ class Message(PartialMessage, Hashable):
                 if role is not None:
                     self.role_mentions.append(role)
 
-    def _handle_call(self, call) -> None:
+    def _handle_call(self, call: Optional[CallPayload]) -> None:
         if call is None or self.type is not MessageType.call:
             self.call = None
             return
@@ -1558,18 +1637,27 @@ class Message(PartialMessage, Hashable):
                 if user is not None:
                     participants.append(user)
 
-        call['participants'] = participants
-        self.call = CallMessage(message=self, **call)
+        self.call = CallMessage(message=self, ended_timestamp=call.get('ended_timestamp'), participants=participants)
 
-    def _handle_components(self, components: List[ComponentPayload]):
-        self.components: List[ActionRow] = [_component_factory(d, self) for d in components]  # type: ignore # Will always be rows here
+    def _handle_components(self, data: List[ComponentPayload]) -> None:
+        self.components = []
+
+        for component_data in data:
+            component = _component_factory(component_data, self)
+
+            if component is not None:
+                self.components.append(component)
 
     def _handle_interaction(self, data: MessageInteractionPayload):
         self.interaction = Interaction._from_message(self, **data)
 
-    def _rebind_cached_references(self, new_guild: Guild, new_channel: Union[TextChannel, Thread]) -> None:
+    def _rebind_cached_references(
+        self,
+        new_guild: Guild,
+        new_channel: Union[GuildChannel, Thread, PartialMessageable],
+    ) -> None:
         self.guild = new_guild
-        self.channel = new_channel
+        self.channel = new_channel  # type: ignore # Not all "GuildChannel" are messageable at the moment
 
     @utils.cached_slot_property('_cs_raw_mentions')
     def raw_mentions(self) -> List[int]:
@@ -1643,7 +1731,7 @@ class Message(PartialMessage, Hashable):
                 return '@deleted-role'
 
             def resolve_channel(id: int) -> str:
-                return f'#deleted-channel'
+                return '#deleted-channel'
 
         transforms = {
             '@': resolve_member,
@@ -1710,7 +1798,10 @@ class Message(PartialMessage, Hashable):
                 return f'{self.author.name} removed {self.mentions[0].name} from the thread.'
 
         if self.type is MessageType.channel_name_change:
-            return f'{self.author.name} changed the channel name: **{self.content}**'
+            if getattr(self.channel, 'parent', self.channel).type is ChannelType.forum:
+                return f'{self.author.name} changed the post title: **{self.content}**'
+            else:
+                return f'{self.author.name} changed the channel name: **{self.content}**'
 
         if self.type is MessageType.channel_icon_change:
             return f'{self.author.name} changed the channel icon.'
@@ -1802,6 +1893,31 @@ class Message(PartialMessage, Hashable):
         if self.type is MessageType.guild_invite_reminder:
             return 'Wondering who to invite?\nStart by inviting anyone who can help you build the server!'
 
+        if self.type is MessageType.role_subscription_purchase and self.role_subscription is not None:
+            total_months = self.role_subscription.total_months_subscribed
+            months = '1 month' if total_months == 1 else f'{total_months} months'
+            action = 'renewed' if self.role_subscription.is_renewal else 'subscribed'
+            return f'{self.author.name} {action} **{self.role_subscription.tier_name}** and has been a subscriber of {self.guild} for {months}!'
+
+        if self.type is MessageType.stage_start:
+            return f'{self.author.name} started **{self.content}**'
+
+        if self.type is MessageType.stage_end:
+            return f'{self.author.name} ended **{self.content}**'
+
+        if self.type is MessageType.stage_speaker:
+            return f'{self.author.name} is now a speaker.'
+
+        if self.type is MessageType.stage_raise_hand:
+            return f'{self.author.name} requested to speak.'
+
+        if self.type is MessageType.stage_topic:
+            return f'{self.author.name} changed the Stage topic: **{self.content}**'
+
+        if self.type is MessageType.guild_application_premium_subscription:
+            return f'{self.author.name} upgraded {self.application.name if self.application else "a deleted application"} to premium for this server!'
+
+        # Fallback for unknown message types
         return self.content
 
     @overload
@@ -1910,15 +2026,15 @@ class Message(PartialMessage, Hashable):
         else:
             flags = MISSING
 
-        params = handle_message_parameters(
+        with handle_message_parameters(
             content=content,
             flags=flags,
             attachments=attachments,
             allowed_mentions=allowed_mentions,
             previous_allowed_mentions=previous_allowed_mentions,
-        )
-        data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
-        message = Message(state=self._state, channel=self.channel, data=data)
+        ) as params:
+            data = await self._state.http.edit_message(self.channel.id, self.id, params=params)
+            message = Message(state=self._state, channel=self.channel, data=data)
 
         if delete_after is not None:
             await self.delete(delay=delete_after)

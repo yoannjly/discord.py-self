@@ -82,6 +82,34 @@ class Permissions(BaseFlags):
         .. describe:: x > y
 
              Checks if a permission is a strict superset of another permission.
+
+        .. describe:: x | y, x |= y
+
+            Returns a Permissions instance with all enabled flags from
+            both x and y.
+
+            .. versionadded:: 2.0
+
+        .. describe:: x & y, x &= y
+
+            Returns a Permissions instance with only flags enabled on
+            both x and y.
+
+            .. versionadded:: 2.0
+
+        .. describe:: x ^ y, x ^= y
+
+            Returns a Permissions instance with only flags enabled on
+            only one of x or y, not on both.
+
+            .. versionadded:: 2.0
+
+        .. describe:: ~x
+
+            Returns a Permissions instance with all flags inverted from x.
+
+            .. versionadded:: 2.0
+
         .. describe:: hash(x)
 
                Return the permission's hash.
@@ -159,6 +187,18 @@ class Permissions(BaseFlags):
         return ~p.value
 
     @classmethod
+    def _dm_permissions(cls) -> Self:
+        base = cls.text()
+        base.read_messages = True
+        base.send_tts_messages = False
+        base.manage_messages = False
+        base.create_private_threads = False
+        base.create_public_threads = False
+        base.manage_threads = False
+        base.send_messages_in_threads = False
+        return base
+
+    @classmethod
     def all_channel(cls) -> Self:
         """A :class:`Permissions` with all channel-specific permissions set to
         ``True`` and the guild-specific ones set to ``False``. The guild-specific
@@ -175,7 +215,7 @@ class Permissions(BaseFlags):
         - :attr:`administrator`
 
         .. versionchanged:: 1.7
-           Added :attr:`stream`, :attr:`priority_speaker` and :attr:`use_slash_commands` permissions.
+           Added :attr:`stream`, :attr:`priority_speaker` and :attr:`use_application_commands` permissions.
 
         .. versionchanged:: 2.0
            Added :attr:`create_public_threads`, :attr:`create_private_threads`, :attr:`manage_threads`,
@@ -216,7 +256,7 @@ class Permissions(BaseFlags):
 
         .. versionchanged:: 1.7
            Permission :attr:`read_messages` is no longer part of the text permissions.
-           Added :attr:`use_slash_commands` permission.
+           Added :attr:`use_application_commands` permission.
 
         .. versionchanged:: 2.0
            Added :attr:`create_public_threads`, :attr:`create_private_threads`, :attr:`manage_threads`,
@@ -520,7 +560,7 @@ class Permissions(BaseFlags):
         return 1 << 30
 
     @flag_value
-    def use_slash_commands(self) -> int:
+    def use_application_commands(self) -> int:
         """:class:`bool`: Returns ``True`` if a user can use slash commands.
 
         .. versionadded:: 1.7
@@ -710,7 +750,7 @@ class PermissionOverwrite:
         manage_webhooks: Optional[bool]
         manage_emojis: Optional[bool]
         manage_emojis_and_stickers: Optional[bool]
-        use_slash_commands: Optional[bool]
+        use_application_commands: Optional[bool]
         request_to_speak: Optional[bool]
         manage_events: Optional[bool]
         manage_threads: Optional[bool]

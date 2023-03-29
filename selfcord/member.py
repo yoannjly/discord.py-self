@@ -28,7 +28,7 @@ import datetime
 import inspect
 import itertools
 from operator import attrgetter
-from typing import Any, Awaitable, Callable, Collection, Dict, List, Optional, TYPE_CHECKING, Tuple, Union, Type
+from typing import Any, Awaitable, Callable, Collection, Dict, List, Optional, TYPE_CHECKING, Tuple, TypeVar, Union
 
 import selfcord.abc
 
@@ -41,11 +41,14 @@ from .enums import RelationshipAction, Status, try_enum
 from .errors import ClientException
 from .colour import Colour
 from .object import Object
+from .flags import MemberFlags
 
 __all__ = (
     'VoiceState',
     'Member',
 )
+
+T = TypeVar('T', bound=type)
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -170,7 +173,7 @@ class VoiceState:
         return f'<{self.__class__.__name__} {inner}>'
 
 
-def flatten_user(cls: Any) -> Type[Member]:
+def flatten_user(cls: T) -> T:
     for attr, value in itertools.chain(BaseUser.__dict__.items(), User.__dict__.items()):
         # Ignore private/special methods
         if attr.startswith('_'):
@@ -273,7 +276,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         '_user',
         '_state',
         '_avatar',
-        '_communication_disabled_until',
+        '_flags',
     )
 
     if TYPE_CHECKING:
@@ -304,6 +307,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         self.nick: Optional[str] = data.get('nick', None)
         self.pending: bool = data.get('pending', False)
         self._avatar: Optional[str] = data.get('avatar')
+        self._flags: int = data.get('flags', 0)
         self.timed_out_until: Optional[datetime.datetime] = utils.parse_time(data.get('communication_disabled_until'))
 
     def __str__(self) -> str:
@@ -337,6 +341,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         self.nick = data.get('nick', None)
         self.pending = data.get('pending', False)
         self.timed_out_until = utils.parse_time(data.get('communication_disabled_until'))
+        self._flags = data.get('flags', 0)
 
     @classmethod
     def _try_upgrade(cls, *, data: UserWithMemberPayload, guild: Guild, state: ConnectionState) -> Union[User, Self]:
@@ -361,6 +366,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         self.nick = member.nick
         self.pending = member.pending
         self.timed_out_until = member.timed_out_until
+        self._flags = member._flags
         self._state = member._state
         self._avatar = member._avatar
 
@@ -388,6 +394,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         self.timed_out_until = utils.parse_time(data.get('communication_disabled_until'))
         self._roles = utils.SnowflakeList(map(int, data['roles']))
         self._avatar = data.get('avatar')
+        self._flags = data.get('flags', 0)
 
         attrs = {'joined_at', 'premium_since', '_roles', '_avatar', 'timed_out_until', 'nick', 'pending'}
 
@@ -491,6 +498,22 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         result.append(g.default_role)
         result.sort()
         return result
+
+    @property
+    def display_icon(self) -> Optional[Union[str, Asset]]:
+        """Optional[Union[:class:`str`, :class:`Asset`]]: A property that returns the role icon that is rendered for
+        this member. If no icon is shown then ``None`` is returned.
+
+        .. versionadded:: 2.0
+        """
+
+        roles = self.roles[1:]  # remove @everyone
+        for role in reversed(roles):
+            icon = role.display_icon
+            if icon:
+                return icon
+
+        return None
 
     @property
     def mention(self) -> str:
@@ -631,17 +654,31 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         """Optional[:class:`VoiceState`]: Returns the member's current voice state."""
         return self.guild._voice_state_for(self._user.id)
 
+    @property
+    def flags(self) -> MemberFlags:
+        """:class:`MemberFlags`: Returns the member's flags.
+
+        .. versionadded:: 2.0
+        """
+        return MemberFlags._from_value(self._flags)
+
     async def ban(
         self,
         *,
-        delete_message_days: int = 1,
+        delete_message_days: int = MISSING,
+        delete_message_seconds: int = MISSING,
         reason: Optional[str] = None,
     ) -> None:
         """|coro|
 
         Bans this member. Equivalent to :meth:`Guild.ban`.
         """
-        await self.guild.ban(self, reason=reason, delete_message_days=delete_message_days)
+        await self.guild.ban(
+            self,
+            reason=reason,
+            delete_message_days=delete_message_days,
+            delete_message_seconds=delete_message_seconds,
+        )
 
     async def unban(self, *, reason: Optional[str] = None) -> None:
         """|coro|
@@ -670,6 +707,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         avatar: Optional[bytes] = MISSING,
         banner: Optional[bytes] = MISSING,
         bio: Optional[str] = MISSING,
+        bypass_verification: bool = MISSING,
         reason: Optional[str] = None,
     ) -> Optional[Member]:
         """|coro|
@@ -678,21 +716,23 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
 
         Depending on the parameter passed, this requires different permissions listed below:
 
-        +-----------------+--------------------------------------+
-        |   Parameter     |              Permission              |
-        +-----------------+--------------------------------------+
-        | nick            | :attr:`Permissions.manage_nicknames` |
-        +-----------------+--------------------------------------+
-        | mute            | :attr:`Permissions.mute_members`     |
-        +-----------------+--------------------------------------+
-        | deafen          | :attr:`Permissions.deafen_members`   |
-        +-----------------+--------------------------------------+
-        | roles           | :attr:`Permissions.manage_roles`     |
-        +-----------------+--------------------------------------+
-        | voice_channel   | :attr:`Permissions.move_members`     |
-        +-----------------+--------------------------------------+
-        | timed_out_until | :attr:`Permissions.moderate_members` |
-        +-----------------+--------------------------------------+
+        +---------------------+---------------------------------------+
+        |      Parameter      |              Permission               |
+        +---------------------+---------------------------------------+
+        | nick                | :attr:`Permissions.manage_nicknames`  |
+        +---------------------+---------------------------------------+
+        | mute                | :attr:`Permissions.mute_members`      |
+        +---------------------+---------------------------------------+
+        | deafen              | :attr:`Permissions.deafen_members`    |
+        +---------------------+---------------------------------------+
+        | roles               | :attr:`Permissions.manage_roles`      |
+        +---------------------+---------------------------------------+
+        | voice_channel       | :attr:`Permissions.move_members`      |
+        +---------------------+---------------------------------------+
+        | timed_out_until     | :attr:`Permissions.moderate_members`  |
+        +---------------------+---------------------------------------+
+        | bypass_verification | :attr:`Permissions.moderate_members`  |
+        +---------------------+---------------------------------------+
 
         All parameters are optional.
 
@@ -746,6 +786,10 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
             You can only change your own guild bio.
 
             .. versionadded:: 2.0
+        bypass_verification: :class:`bool`
+            Indicates if the member should be allowed to bypass the guild verification requirements.
+
+            .. versionadded:: 2.0
         reason: Optional[:class:`str`]
             The reason for editing this member. Shows up on the audit log.
 
@@ -761,8 +805,8 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         Returns
         --------
         Optional[:class:`.Member`]
-            The newly updated member, if applicable. This is only returned
-            when certain fields are updated.
+            The newly updated member, if applicable. This is not returned
+            if certain fields are passed, such as ``suppress``.
         """
         http = self._state.http
         guild_id = self.guild.id
@@ -826,6 +870,11 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
                     )
                 payload['communication_disabled_until'] = timed_out_until.isoformat()
 
+        if bypass_verification is not MISSING:
+            flags = MemberFlags._from_value(self._flags)
+            flags.bypasses_verification = bypass_verification
+            payload['flags'] = flags.value
+
         if payload:
             data = await http.edit_member(guild_id, self.id, reason=reason, **payload)
 
@@ -874,8 +923,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
 
         Moves a member to a new voice channel (they must be connected first).
 
-        You must have the :attr:`~Permissions.move_members` permission to
-        use this.
+        You must have :attr:`~Permissions.move_members` to do this.
 
         This raises the same exceptions as :meth:`edit`.
 
@@ -900,8 +948,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
         Applies a time out to a member until the specified date time or for the
         given :class:`datetime.timedelta`.
 
-        You must have the :attr:`~Permissions.moderate_members` permission to
-        use this.
+        You must have :attr:`~Permissions.moderate_members` to do this.
 
         This raises the same exceptions as :meth:`edit`.
 
@@ -937,7 +984,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
 
         Gives the member a number of :class:`Role`\s.
 
-        You must have the :attr:`~Permissions.manage_roles` permission to
+        You must have :attr:`~Permissions.manage_roles` to
         use this, and the added :class:`Role`\s must appear lower in the list
         of roles than the highest role of the member.
 
@@ -976,7 +1023,7 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
 
         Removes :class:`Role`\s from this member.
 
-        You must have the :attr:`~Permissions.manage_roles` permission to
+        You must have :attr:`~Permissions.manage_roles` to
         use this, and the removed :class:`Role`\s must appear lower in the list
         of roles than the highest role of the member.
 

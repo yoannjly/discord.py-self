@@ -391,7 +391,9 @@ class Cog(metaclass=CogMeta):
 
     @_cog_special_method
     async def cog_command_error(self, ctx: Context[BotT], error: Exception) -> None:
-        """A special method that is called whenever an error
+        """|coro|
+
+        A special method that is called whenever an error
         is dispatched inside this cog.
 
         This is similar to :func:`.on_command_error` except only applying
@@ -410,7 +412,9 @@ class Cog(metaclass=CogMeta):
 
     @_cog_special_method
     async def cog_before_invoke(self, ctx: Context[BotT]) -> None:
-        """A special method that acts as a cog local pre-invoke hook.
+        """|coro|
+
+        A special method that acts as a cog local pre-invoke hook.
 
         This is similar to :meth:`.Command.before_invoke`.
 
@@ -425,7 +429,9 @@ class Cog(metaclass=CogMeta):
 
     @_cog_special_method
     async def cog_after_invoke(self, ctx: Context[BotT]) -> None:
-        """A special method that acts as a cog local post-invoke hook.
+        """|coro|
+
+        A special method that acts as a cog local post-invoke hook.
 
         This is similar to :meth:`.Command.after_invoke`.
 
@@ -453,14 +459,16 @@ class Cog(metaclass=CogMeta):
             command.cog = self
             if command.parent is None:
                 try:
-                    # Type checker does not understand the generic bounds here
                     bot.add_command(command)  # type: ignore
                 except Exception as e:
                     # undo our additions
                     for to_undo in self.__cog_commands__[:index]:
                         if to_undo.parent is None:
                             bot.remove_command(to_undo.name)
-                    raise e
+                    try:
+                        await maybe_coroutine(self.cog_unload)
+                    finally:
+                        raise e
 
         # check if we're overriding the default
         if cls.bot_check is not Cog.bot_check:

@@ -82,7 +82,16 @@ if TYPE_CHECKING:
     from .guild import Guild
     from .member import Member
     from .message import Message, MessageReference, PartialMessage
-    from .channel import TextChannel, DMChannel, GroupChannel, PartialMessageable, VoiceChannel, CategoryChannel
+    from .channel import (
+        TextChannel,
+        DMChannel,
+        GroupChannel,
+        PartialMessageable,
+        VocalGuildChannel,
+        VoiceChannel,
+        StageChannel,
+        CategoryChannel,
+    )
     from .threads import Thread
     from .enums import InviteTarget
     from .types.channel import (
@@ -95,7 +104,8 @@ if TYPE_CHECKING:
         SnowflakeList,
     )
 
-    MessageableChannel = Union[TextChannel, VoiceChannel, Thread, DMChannel, PartialMessageable, GroupChannel]
+    MessageableChannel = Union[TextChannel, VoiceChannel, StageChannel, Thread, DMChannel, PartialMessageable, GroupChannel]
+    VocalChannel = Union[VoiceChannel, StageChannel, DMChannel, GroupChannel]
     SnowflakeTime = Union["Snowflake", datetime]
 
 MISSING = utils.MISSING
@@ -110,14 +120,14 @@ _undefined: Any = _Undefined()
 
 
 async def _purge_helper(
-    channel: Union[Thread, TextChannel, VoiceChannel],
+    channel: Union[Thread, TextChannel, VocalGuildChannel],
     *,
     limit: Optional[int] = 100,
     check: Callable[[Message], bool] = MISSING,
     before: Optional[SnowflakeTime] = None,
     after: Optional[SnowflakeTime] = None,
     around: Optional[SnowflakeTime] = None,
-    oldest_first: Optional[bool] = False,
+    oldest_first: Optional[bool] = None,
     reason: Optional[str] = None,
 ) -> List[Message]:
     if check is MISSING:
@@ -288,7 +298,6 @@ class Snowflake(Protocol):
         The model's unique ID.
     """
 
-    __slots__ = ()
     id: int
 
 
@@ -313,10 +322,8 @@ class User(Snowflake, Protocol):
     bot: :class:`bool`
         If the user is a bot account.
     system: :class:`bool`
-        If the user is a system user (i.e. represents Discord officially).
+        If the user is a system account.
     """
-
-    __slots__ = ()
 
     name: str
     discriminator: str
@@ -338,9 +345,38 @@ class User(Snowflake, Protocol):
         """Optional[:class:`~selfcord.Asset`]: Returns an Asset that represents the user's avatar, if present."""
         raise NotImplementedError
 
+    @property
+    def default_avatar(self) -> Asset:
+        """:class:`~selfcord.Asset`: Returns the default avatar for a given user. This is calculated by the user's discriminator."""
+        raise NotImplementedError
 
-@runtime_checkable
-class PrivateChannel(Snowflake, Protocol):
+    @property
+    def display_avatar(self) -> Asset:
+        """:class:`~selfcord.Asset`: Returns the user's display avatar.
+
+        For regular users this is just their default avatar or uploaded avatar.
+
+        .. versionadded:: 2.0
+        """
+        raise NotImplementedError
+
+    def mentioned_in(self, message: Message) -> bool:
+        """Checks if the user is mentioned in the specified message.
+
+        Parameters
+        -----------
+        message: :class:`~selfcord.Message`
+            The message to check if you're mentioned in.
+
+        Returns
+        -------
+        :class:`bool`
+            Indicates if the user is mentioned in the message.
+        """
+        raise NotImplementedError
+
+
+class PrivateChannel:
     """An ABC that details the common operations on a private Discord channel.
 
     The following implement this ABC:
@@ -358,6 +394,7 @@ class PrivateChannel(Snowflake, Protocol):
 
     __slots__ = ()
 
+    id: int
     me: ClientUser
 
     def _add_call(self, **kwargs):
@@ -403,6 +440,7 @@ class GuildChannel:
     - :class:`~selfcord.VoiceChannel`
     - :class:`~selfcord.CategoryChannel`
     - :class:`~selfcord.StageChannel`
+    - :class:`~selfcord.ForumChannel`
 
     This ABC must also implement :class:`~selfcord.abc.Snowflake`.
 
@@ -494,6 +532,11 @@ class GuildChannel:
             pass
 
         try:
+            options['default_thread_rate_limit_per_user'] = options.pop('default_thread_slowmode_delay')
+        except KeyError:
+            pass
+
+        try:
             rtc_region = options.pop('rtc_region')
         except KeyError:
             pass
@@ -543,6 +586,8 @@ class GuildChannel:
 
                 if isinstance(target, Role):
                     payload['type'] = _Overwrites.ROLE
+                elif isinstance(target, Object):
+                    payload['type'] = _Overwrites.ROLE if target.type is Role else _Overwrites.MEMBER
                 else:
                     payload['type'] = _Overwrites.MEMBER
 
@@ -633,14 +678,13 @@ class GuildChannel:
         """
         return f'https://discord.com/channels/{self.guild.id}/{self.id}'
 
-    def overwrites_for(self, obj: Union[Role, User]) -> PermissionOverwrite:
+    def overwrites_for(self, obj: Union[Role, User, Object]) -> PermissionOverwrite:
         """Returns the channel-specific overwrites for a member or a role.
 
         Parameters
         -----------
-        obj: Union[:class:`~selfcord.Role`, :class:`~selfcord.abc.User`]
-            The role or user denoting
-            whose overwrite to get.
+        obj: Union[:class:`~selfcord.Role`, :class:`~selfcord.abc.User`, :class:`~selfcord.Object`]
+            The role or user denoting whose overwrite to get.
 
         Returns
         ---------
@@ -664,16 +708,19 @@ class GuildChannel:
         return PermissionOverwrite()
 
     @property
-    def overwrites(self) -> Dict[Union[Object, Role, Member], PermissionOverwrite]:
+    def overwrites(self) -> Dict[Union[Role, Member, Object], PermissionOverwrite]:
         """Returns all of the channel's overwrites.
 
         This is returned as a dictionary where the key contains the target which
         can be either a :class:`~selfcord.Role` or a :class:`~selfcord.Member` and the value is the
         overwrite as a :class:`~selfcord.PermissionOverwrite`.
 
+        .. versionchanged:: 2.0
+            Overwrites can now be type-aware :class:`~selfcord.Object` in case of cache lookup failure
+
         Returns
         --------
-        Dict[Union[:class:`~selfcord.Object`, :class:`~selfcord.Role`, :class:`~selfcord.Member`], :class:`~selfcord.PermissionOverwrite`]
+        Dict[Union[:class:`~selfcord.Role`, :class:`~selfcord.Member`, :class:`~selfcord.Object`], :class:`~selfcord.PermissionOverwrite`]
             The channel's permission overwrites.
         """
         ret = {}
@@ -689,7 +736,8 @@ class GuildChannel:
                 target = self.guild.get_member(ow.id)
 
             if target is None:
-                target = Object(ow.id)
+                target_type = Role if ow.is_role() else User
+                target = Object(id=ow.id, type=target_type)  # type: ignore
 
             ret[target] = overwrite
         return ret
@@ -717,6 +765,20 @@ class GuildChannel:
         category = self.guild.get_channel(self.category_id)
         return bool(category and category.overwrites == self.overwrites)
 
+    def _apply_implicit_permissions(self, base: Permissions) -> None:
+        # if you can't send a message in a channel then you can't have certain
+        # permissions as well
+        if not base.send_messages:
+            base.send_tts_messages = False
+            base.mention_everyone = False
+            base.embed_links = False
+            base.attach_files = False
+
+        # if you can't read a channel then you have no permissions there
+        if not base.read_messages:
+            denied = Permissions.all_channel()
+            base.value &= ~denied.value
+
     def permissions_for(self, obj: Union[Member, Role], /) -> Permissions:
         """Handles permission resolution for the :class:`~selfcord.Member`
         or :class:`~selfcord.Role`.
@@ -727,6 +789,7 @@ class GuildChannel:
         - Guild roles
         - Channel overrides
         - Member overrides
+        - Implicit permissions
         - Member timeout
 
         If a :class:`~selfcord.Role` is passed, then it checks the permissions
@@ -814,12 +877,6 @@ class GuildChannel:
         if base.administrator:
             return Permissions.all()
 
-        if obj.is_timed_out():
-            # Timeout leads to every permission except VIEW_CHANNEL and READ_MESSAGE_HISTORY
-            # being explicitly denied
-            base.value &= Permissions._timeout_mask()
-            return base
-
         # Apply @everyone allow/deny first since it's special
         try:
             maybe_everyone = self._overwrites[0]
@@ -848,18 +905,11 @@ class GuildChannel:
                 base.handle_overwrite(allow=overwrite.allow, deny=overwrite.deny)
                 break
 
-        # if you can't send a message in a channel then you can't have certain
-        # permissions as well
-        if not base.send_messages:
-            base.send_tts_messages = False
-            base.mention_everyone = False
-            base.embed_links = False
-            base.attach_files = False
-
-        # if you can't read a channel then you have no permissions there
-        if not base.read_messages:
-            denied = Permissions.all_channel()
-            base.value &= ~denied.value
+        if obj.is_timed_out():
+            # Timeout leads to every permission except VIEW_CHANNEL and READ_MESSAGE_HISTORY
+            # being explicitly denied
+            # N.B.: This *must* come last, because it's a conclusive mask
+            base.value &= Permissions._timeout_mask()
 
         return base
 
@@ -868,7 +918,7 @@ class GuildChannel:
 
         Deletes the channel.
 
-        You must have :attr:`~selfcord.Permissions.manage_channels` permission to use this.
+        You must have :attr:`~selfcord.Permissions.manage_channels` to do this.
 
         Parameters
         -----------
@@ -903,7 +953,7 @@ class GuildChannel:
         target: Union[Member, Role],
         *,
         reason: Optional[str] = ...,
-        **permissions: bool,
+        **permissions: Optional[bool],
     ) -> None:
         ...
 
@@ -913,7 +963,7 @@ class GuildChannel:
         *,
         overwrite: Any = _undefined,
         reason: Optional[str] = None,
-        **permissions: bool,
+        **permissions: Optional[bool],
     ) -> None:
         r"""|coro|
 
@@ -932,7 +982,7 @@ class GuildChannel:
         If the ``overwrite`` parameter is ``None``, then the permission
         overwrites are deleted.
 
-        You must have the :attr:`~selfcord.Permissions.manage_roles` permission to use this.
+        You must have :attr:`~selfcord.Permissions.manage_roles` to do this.
 
         .. note::
 
@@ -1048,8 +1098,7 @@ class GuildChannel:
         Clones this channel. This creates a channel with the same properties
         as this channel.
 
-        You must have the :attr:`~selfcord.Permissions.manage_channels` permission to
-        do this.
+        You must have :attr:`~selfcord.Permissions.manage_channels` to do this.
 
         .. versionadded:: 1.1
 
@@ -1130,8 +1179,7 @@ class GuildChannel:
 
         If exact position movement is required, ``edit`` should be used instead.
 
-        You must have the :attr:`~selfcord.Permissions.manage_channels` permission to
-        do this.
+        You must have :attr:`~selfcord.Permissions.manage_channels` to do this.
 
         .. note::
 
@@ -1269,8 +1317,7 @@ class GuildChannel:
 
         Creates an instant invite from a text or voice channel.
 
-        You must have the :attr:`~selfcord.Permissions.create_instant_invite` permission to
-        do this.
+        You must have :attr:`~selfcord.Permissions.create_instant_invite` to do this.
 
         Parameters
         ------------
@@ -1298,12 +1345,12 @@ class GuildChannel:
             .. versionadded:: 2.0
 
         target_user: Optional[:class:`User`]
-            The user whose stream to display for this invite, required if `target_type` is `TargetType.stream`. The user must be streaming in the channel.
+            The user whose stream to display for this invite, required if ``target_type`` is :attr:`.InviteTarget.stream`. The user must be streaming in the channel.
 
             .. versionadded:: 2.0
 
         target_application:: Optional[:class:`.Application`]
-            The embedded application for the invite, required if `target_type` is `TargetType.embedded_application`.
+            The embedded application for the invite, required if ``target_type`` is :attr:`.InviteTarget.embedded_application`.
 
             .. versionadded:: 2.0
 
@@ -1370,6 +1417,7 @@ class Messageable:
 
     - :class:`~selfcord.TextChannel`
     - :class:`~selfcord.VoiceChannel`
+    - :class:`~selfcord.StageChannel`
     - :class:`~selfcord.DMChannel`
     - :class:`~selfcord.GroupChannel`
     - :class:`~selfcord.User`
@@ -1398,6 +1446,7 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         suppress_embeds: bool = ...,
+        silent: bool = ...,
     ) -> Message:
         ...
 
@@ -1415,6 +1464,7 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         suppress_embeds: bool = ...,
+        silent: bool = ...,
     ) -> Message:
         ...
 
@@ -1432,6 +1482,7 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         suppress_embeds: bool = ...,
+        silent: bool = ...,
     ) -> Message:
         ...
 
@@ -1449,6 +1500,7 @@ class Messageable:
         reference: Union[Message, MessageReference, PartialMessage] = ...,
         mention_author: bool = ...,
         suppress_embeds: bool = ...,
+        silent: bool = ...,
     ) -> Message:
         ...
 
@@ -1466,6 +1518,7 @@ class Messageable:
         reference: Optional[Union[Message, MessageReference, PartialMessage]] = None,
         mention_author: Optional[bool] = None,
         suppress_embeds: bool = False,
+        silent: bool = False,
     ) -> Message:
         """|coro|
 
@@ -1530,6 +1583,11 @@ class Messageable:
             Whether to suppress embeds for the message. This sends the message without any embeds if set to ``True``.
 
             .. versionadded:: 2.0
+        silent: :class:`bool`
+            Whether to suppress push and desktop notifications for the message. This will increment the mention counter
+            in the UI, but will not actually send a notification.
+
+            .. versionadded:: 2.0
 
         Raises
         --------
@@ -1571,10 +1629,12 @@ class Messageable:
         else:
             reference_dict = MISSING
 
-        if suppress_embeds:
+        if suppress_embeds or silent:
             from .message import MessageFlags  # circular import
 
-            flags = MessageFlags._from_value(4)
+            flags = MessageFlags._from_value(0)
+            flags.suppress_embeds = suppress_embeds
+            flags.suppress_notifications = silent
         else:
             flags = MISSING
 
@@ -1599,31 +1659,30 @@ class Messageable:
             await ret.delete(delay=delete_after)
         return ret
 
-    async def trigger_typing(self) -> None:
-        """|coro|
-
-        Triggers a *typing* indicator to the destination.
-
-        *Typing* indicator will go away after 10 seconds, or after a message is sent.
-        """
-        channel = await self._get_channel()
-        await self._state.http.send_typing(channel.id)
-
     def typing(self) -> Typing:
-        """Returns an asynchronous context manager that allows you to type for an indefinite period of time.
-
-        This is useful for denoting long computations in your bot.
+        """Returns an asynchronous context manager that allows you to send a typing indicator to
+        the destination for an indefinite period of time, or 10 seconds if the context manager
+        is called using ``await``.
 
         Example Usage: ::
 
             async with channel.typing():
                 # simulate something heavy
-                await asyncio.sleep(10)
+                await asyncio.sleep(20)
 
-            await channel.send('done!')
+            await channel.send('Done!')
+
+        Example Usage: ::
+
+            await channel.typing()
+            # Do some computational magic for about 10 seconds
+            await channel.send('Done!')
 
         .. versionchanged:: 2.0
             This no longer works with the ``with`` syntax, ``async with`` must be used instead.
+
+        .. versionchanged:: 2.0
+            Added functionality to ``await`` the context manager to send a typing indicator for 10 seconds.
         """
         return Typing(self)
 
@@ -1694,6 +1753,8 @@ class Messageable:
 
         Raises
         -------
+        ~selfcord.Forbidden
+            You do not have the permission to retrieve pinned messages.
         ~selfcord.HTTPException
             Retrieving the pinned messages failed.
 
@@ -1718,7 +1779,7 @@ class Messageable:
     ) -> AsyncIterator[Message]:
         """Returns an :term:`asynchronous iterator` that enables receiving the destination's message history.
 
-        You must have :attr:`~selfcord.Permissions.read_message_history` permissions to use this.
+        You must have :attr:`~selfcord.Permissions.read_message_history` to do this.
 
         Examples
         ---------
@@ -1774,7 +1835,7 @@ class Messageable:
             The message with the message data parsed.
         """
 
-        async def _around_strategy(retrieve, around, limit):
+        async def _around_strategy(retrieve: int, around: Optional[Snowflake], limit: Optional[int]):
             if not around:
                 return []
 
@@ -1783,7 +1844,7 @@ class Messageable:
 
             return data, None, limit
 
-        async def _after_strategy(retrieve, after, limit):
+        async def _after_strategy(retrieve: int, after: Optional[Snowflake], limit: Optional[int]):
             after_id = after.id if after else None
             data = await self._state.http.logs_from(channel.id, retrieve, after=after_id)
 
@@ -1795,7 +1856,7 @@ class Messageable:
 
             return data, after, limit
 
-        async def _before_strategy(retrieve, before, limit):
+        async def _before_strategy(retrieve: int, before: Optional[Snowflake], limit: Optional[int]):
             before_id = before.id if before else None
             data = await self._state.http.logs_from(channel.id, retrieve, before=before_id)
 
@@ -1851,23 +1912,25 @@ class Messageable:
         channel = await self._get_channel()
 
         while True:
-            retrieve = min(100 if limit is None else limit, 100)
+            retrieve = 100 if limit is None else min(limit, 100)
             if retrieve < 1:
                 return
 
             data, state, limit = await strategy(retrieve, state, limit)
-
-            # Terminate loop on next iteration; there's no data left after this
-            if len(data) < 100:
-                limit = 0
 
             if reverse:
                 data = reversed(data)
             if predicate:
                 data = filter(predicate, data)
 
-            for raw_message in data:
+            count = 0
+
+            for count, raw_message in enumerate(data, 1):
                 yield self._state.create_message(channel=channel, data=raw_message)
+
+            if count < 100:
+                # There's no data left after this
+                break
 
     def slash_commands(
         self,
@@ -2039,8 +2102,8 @@ class Connectable(Protocol):
     __slots__ = ()
     _state: ConnectionState
 
-    async def _get_channel(self) -> Connectable:
-        return self
+    async def _get_channel(self) -> VocalChannel:
+        raise NotImplementedError
 
     def _get_voice_client_key(self) -> Tuple[int, str]:
         raise NotImplementedError
@@ -2053,8 +2116,10 @@ class Connectable(Protocol):
         *,
         timeout: float = 60.0,
         reconnect: bool = True,
-        cls: Callable[[Client, Connectable], T] = MISSING,
+        cls: Callable[[Client, VocalChannel], T] = VoiceClient,
         _channel: Optional[Connectable] = None,
+        self_deaf: bool = False,
+        self_mute: bool = False,
     ) -> T:
         """|coro|
 
@@ -2072,6 +2137,14 @@ class Connectable(Protocol):
         cls: Type[:class:`~selfcord.VoiceProtocol`]
             A type that subclasses :class:`~selfcord.VoiceProtocol` to connect with.
             Defaults to :class:`~selfcord.VoiceClient`.
+        self_mute: :class:`bool`
+            Indicates if the client should be self-muted.
+
+            .. versionadded:: 2.0
+        self_deaf: :class:`bool`
+            Indicates if the client should be self-deafened.
+
+            .. versionadded:: 2.0
 
         Raises
         -------
@@ -2096,10 +2169,6 @@ class Connectable(Protocol):
         if state._get_voice_client(key_id):
             raise ClientException('Already connected to a voice channel')
 
-        if cls is MISSING:
-            cls = VoiceClient  # type: ignore
-
-        # The type checker doesn't understand that VoiceClient *is* T here.
         voice: T = cls(state.client, channel)
 
         if not isinstance(voice, VoiceProtocol):
@@ -2108,7 +2177,7 @@ class Connectable(Protocol):
         state._add_voice_client(key_id, voice)
 
         try:
-            await voice.connect(timeout=timeout, reconnect=reconnect)
+            await voice.connect(timeout=timeout, reconnect=reconnect, self_deaf=self_deaf, self_mute=self_mute)
         except asyncio.TimeoutError:
             try:
                 await voice.disconnect(force=True)

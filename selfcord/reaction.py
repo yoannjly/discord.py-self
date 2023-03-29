@@ -117,7 +117,7 @@ class Reaction:
         Remove the reaction by the provided :class:`User` from the message.
 
         If the reaction is not your own (i.e. ``user`` parameter is not you) then
-        the :attr:`~Permissions.manage_messages` permission is needed.
+        :attr:`~Permissions.manage_messages` is needed.
 
         The ``user`` parameter must represent a user or member and meet
         the :class:`abc.Snowflake` abc.
@@ -144,7 +144,7 @@ class Reaction:
 
         Clears this reaction from the message.
 
-        You need the :attr:`~Permissions.manage_messages` permission to use this.
+        You must have :attr:`~Permissions.manage_messages` to do this.
 
         .. versionadded:: 1.3
 
@@ -237,6 +237,9 @@ class Reaction:
             if data:
                 limit -= len(data)
                 after = Object(id=int(data[-1]['id']))
+            else:
+                # Terminate loop if we received no data
+                limit = 0
 
             if guild is None or isinstance(guild, Object):
                 for raw_user in reversed(data):

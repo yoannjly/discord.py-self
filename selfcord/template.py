@@ -24,7 +24,7 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING, List
 from .utils import parse_time, _bytes_to_base64_data, MISSING
 from .guild import Guild
 
@@ -77,7 +77,7 @@ class _PartialTemplateState:
     def _get_guild(self, id):
         return self.__state._get_guild(id)
 
-    async def query_members(self, **kwargs: Any):
+    async def query_members(self, **kwargs: Any) -> List[Any]:
         return []
 
     def __getattr__(self, attr):
@@ -107,7 +107,7 @@ class Template:
         An aware datetime in UTC representing when the template was last updated.
         This is referred to as "last synced" in the official Discord client.
     source_guild: :class:`Guild`
-        The source guild.
+        The guild snapshot that represents the data that this template currently holds.
     is_dirty: Optional[:class:`bool`]
         Whether the template has unsynced changes.
 
@@ -208,8 +208,7 @@ class Template:
 
         Sync the template to the guild's current state.
 
-        You must have the :attr:`~Permissions.manage_guild` permission in the
-        source guild to do this.
+        You must have :attr:`~Permissions.manage_guild` in the source guild to do this.
 
         .. versionadded:: 1.7
 
@@ -244,8 +243,7 @@ class Template:
 
         Edit the template metadata.
 
-        You must have the :attr:`~Permissions.manage_guild` permission in the
-        source guild to do this.
+        You must have :attr:`~Permissions.manage_guild` in the source guild to do this.
 
         .. versionadded:: 1.7
 
@@ -288,8 +286,7 @@ class Template:
 
         Delete the template.
 
-        You must have the :attr:`~Permissions.manage_guild` permission in the
-        source guild to do this.
+        You must have :attr:`~Permissions.manage_guild` in the source guild to do this.
 
         .. versionadded:: 1.7
 

@@ -24,7 +24,7 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING, Tuple, Union
+from typing import ClassVar, List, Literal, Optional, TYPE_CHECKING, Tuple, Union, overload
 
 from .enums import try_enum, ComponentType, ButtonStyle, TextStyle, InteractionType
 from .interactions import _wrapped_interaction
@@ -39,12 +39,14 @@ if TYPE_CHECKING:
         ButtonComponent as ButtonComponentPayload,
         SelectMenu as SelectMenuPayload,
         SelectOption as SelectOptionPayload,
-        ActionRow as ActionRowPayload,
         TextInput as TextInputPayload,
+        ActionRowChildComponent as ActionRowChildComponentPayload,
     )
     from .emoji import Emoji
     from .interactions import Interaction
     from .message import Message
+
+    ActionRowChildComponentType = Union['Button', 'SelectMenu', 'TextInput']
 
 
 __all__ = (
@@ -68,22 +70,21 @@ class Component:
     - :class:`TextInput`
 
     .. versionadded:: 2.0
-
-    Attributes
-    ------------
-    type: :class:`ComponentType`
-        The type of component.
     """
 
-    __slots__: Tuple[str, ...] = ('type', 'message')
+    __slots__ = ('message',)
 
     __repr_info__: ClassVar[Tuple[str, ...]]
-    type: ComponentType
     message: Message
 
     def __repr__(self) -> str:
         attrs = ' '.join(f'{key}={getattr(self, key)!r}' for key in self.__repr_info__)
         return f'<{self.__class__.__name__} {attrs}>'
+
+    @property
+    def type(self) -> ComponentType:
+        """:class:`ComponentType`: The type of component."""
+        raise NotImplementedError
 
     @classmethod
     def _raw_construct(cls, **kwargs) -> Self:
@@ -97,7 +98,7 @@ class Component:
                 setattr(self, slot, value)
         return self
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ComponentPayload:
         raise NotImplementedError
 
 
@@ -112,28 +113,30 @@ class ActionRow(Component):
 
     Attributes
     ------------
-    type: :class:`ComponentType`
-        The type of component.
-    children: List[:class:`Component`]
+    children: List[Union[:class:`Button`, :class:`SelectMenu`, :class:`TextInput`]]
         The children components that this holds, if any.
     message: :class:`Message`
         The originating message.
     """
 
-    __slots__: Tuple[str, ...] = ('children',)
+    __slots__ = ('children',)
 
     __repr_info__: ClassVar[Tuple[str, ...]] = __slots__
 
     def __init__(self, data: ComponentPayload, message: Message):
         self.message = message
-        self.type: ComponentType = try_enum(ComponentType, data['type'])
-        self.children: List[Component] = [_component_factory(d, message) for d in data.get('components', [])]
+        self.children: List[ActionRowChildComponentType] = []
 
-    def to_dict(self) -> ActionRowPayload:
-        return {
-            'type': int(self.type),
-            'components': [child.to_dict() for child in self.children],
-        }  # type: ignore # Type checker does not understand these are the same
+        for component_data in data.get('components', []):
+            component = _component_factory(component_data)
+
+            if component is not None:
+                self.children.append(component)
+
+    @property
+    def type(self) -> Literal[ComponentType.action_row]:
+        """:class:`ComponentType`: The type of component."""
+        return ComponentType.action_row
 
 
 class Button(Component):
@@ -162,7 +165,7 @@ class Button(Component):
         The originating message.
     """
 
-    __slots__: Tuple[str, ...] = (
+    __slots__ = (
         'style',
         'custom_id',
         'url',
@@ -175,7 +178,6 @@ class Button(Component):
 
     def __init__(self, data: ButtonComponentPayload, message: Message):
         self.message = message
-        self.type: ComponentType = try_enum(ComponentType, data['type'])
         self.style: ButtonStyle = try_enum(ButtonStyle, data['style'])
         self.custom_id: Optional[str] = data.get('custom_id')
         self.url: Optional[str] = data.get('url')
@@ -186,6 +188,11 @@ class Button(Component):
             self.emoji = PartialEmoji.from_dict(data['emoji'])
         except KeyError:
             self.emoji = None
+
+    @property
+    def type(self) -> Literal[ComponentType.button]:
+        """:class:`ComponentType`: The type of component."""
+        return ComponentType.button
 
     def to_dict(self) -> dict:
         return {
@@ -254,7 +261,7 @@ class SelectMenu(Component):
         The originating message, if any.
     """
 
-    __slots__: Tuple[str, ...] = (
+    __slots__ = (
         'custom_id',
         'placeholder',
         'min_values',
@@ -268,7 +275,6 @@ class SelectMenu(Component):
 
     def __init__(self, data: SelectMenuPayload, message: Message):
         self.message = message
-        self.type = ComponentType.select
         self.custom_id: str = data['custom_id']
         self.placeholder: Optional[str] = data.get('placeholder')
         self.min_values: int = data.get('min_values', 1)
@@ -276,6 +282,11 @@ class SelectMenu(Component):
         self.options: List[SelectOption] = [SelectOption.from_dict(option) for option in data.get('options', [])]
         self.disabled: bool = data.get('disabled', False)
         self.hash: str = data.get('hash', '')
+
+    @property
+    def type(self) -> Literal[ComponentType.select]:
+        """:class:`ComponentType`: The type of component."""
+        return ComponentType.select
 
     def to_dict(self, options: Tuple[SelectOption]) -> dict:
         return {
@@ -333,13 +344,13 @@ class SelectOption:
     description: Optional[:class:`str`]
         An additional description of the option, if any.
         Can only be up to 100 characters.
-    emoji: Optional[Union[:class:`str`, :class:`Emoji`, :class:`PartialEmoji`]]
+    emoji: Optional[:class:`PartialEmoji`]
         The emoji of the option, if available.
     default: :class:`bool`
         Whether this option is selected by default.
     """
 
-    __slots__: Tuple[str, ...] = (
+    __slots__ = (
         'label',
         'value',
         'description',
@@ -368,7 +379,7 @@ class SelectOption:
             else:
                 raise TypeError(f'expected emoji to be str, Emoji, or PartialEmoji not {emoji.__class__}')
 
-        self.emoji: Optional[Union[str, Emoji, PartialEmoji]] = emoji
+        self.emoji: Optional[PartialEmoji] = emoji
         self.default: bool = default
 
     def __repr__(self) -> str:
@@ -426,7 +437,7 @@ class TextInput(Component):
         The maximum length of the text input.
     """
 
-    __slots__: Tuple[str, ...] = (
+    __slots__ = (
         'style',
         'label',
         'custom_id',
@@ -440,8 +451,7 @@ class TextInput(Component):
 
     __repr_info__: ClassVar[Tuple[str, ...]] = __slots__
 
-    def __init__(self, data: TextInputPayload, _=MISSING) -> None:
-        self.type: ComponentType = ComponentType.text_input
+    def __init__(self, data: TextInputPayload, *args) -> None:
         self.style: TextStyle = try_enum(TextStyle, data['style'])
         self.label: str = data['label']
         self.custom_id: str = data['custom_id']
@@ -451,12 +461,10 @@ class TextInput(Component):
         self.min_length: Optional[int] = data.get('min_length')
         self.max_length: Optional[int] = data.get('max_length')
 
-    def to_dict(self) -> dict:
-        return {
-            'type': self.type.value,
-            'custom_id': self.custom_id,
-            'value': self.value,
-        }
+    @property
+    def type(self) -> Literal[ComponentType.text_input]:
+        """:class:`ComponentType`: The type of component."""
+        return ComponentType.text_input
 
     @property
     def value(self) -> Optional[str]:
@@ -499,18 +507,36 @@ class TextInput(Component):
         """
         self.value = value
 
+    def to_dict(self) -> dict:
+        return {
+            'type': self.type.value,
+            'custom_id': self.custom_id,
+            'value': self.value,
+        }
 
-def _component_factory(data: ComponentPayload, message: Message = MISSING) -> Component:
-    # The type checker does not properly do narrowing here
-    component_type = data['type']
-    if component_type == 1:
+
+@overload
+def _component_factory(
+    data: ActionRowChildComponentPayload, message: Message = ...
+) -> Optional[ActionRowChildComponentType]:
+    ...
+
+
+@overload
+def _component_factory(
+    data: ComponentPayload, message: Message = ...
+) -> Optional[Union[ActionRow, ActionRowChildComponentType]]:
+    ...
+
+
+def _component_factory(
+    data: ComponentPayload, message: Message = MISSING
+) -> Optional[Union[ActionRow, ActionRowChildComponentType]]:
+    if data['type'] == 1:
         return ActionRow(data, message)
-    elif component_type == 2:
-        return Button(data, message)  # type: ignore
-    elif component_type == 3:
-        return SelectMenu(data, message)  # type: ignore
-    elif component_type == 4:
-        return TextInput(data, message)  # type: ignore
-    else:
-        as_enum = try_enum(ComponentType, component_type)
-        return Component._raw_construct(type=as_enum)
+    elif data['type'] == 2:
+        return Button(data, message)
+    elif data['type'] == 3:
+        return SelectMenu(data, message)
+    elif data['type'] == 4:
+        return TextInput(data, message)

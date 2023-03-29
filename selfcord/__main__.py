@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 import selfcord
-import pkg_resources
+import importlib.metadata
 import aiohttp
 import platform
 
@@ -43,9 +43,9 @@ def show_version() -> None:
     version_info = selfcord.version_info
     entries.append('- selfcord.py v{0.major}.{0.minor}.{0.micro}-{0.releaselevel}'.format(version_info))
     if version_info.releaselevel != 'final':
-        pkg = pkg_resources.get_distribution('selfcord.py')
-        if pkg:
-            entries.append(f'    - selfcord.py pkg_resources: v{pkg.version}')
+        version = importlib.metadata.version('selfcord.py')
+        if version:
+            entries.append(f'    - selfcord.py metadata: v{version}')
 
     entries.append(f'- aiohttp v{aiohttp.__version__}')
     uname = platform.uname()

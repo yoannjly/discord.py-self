@@ -35,6 +35,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    overload,
     Protocol,
     Tuple,
     Type,
@@ -42,6 +43,7 @@ from typing import (
     Union,
     runtime_checkable,
 )
+import types
 
 import selfcord
 
@@ -74,6 +76,7 @@ __all__ = (
     'EmojiConverter',
     'PartialEmojiConverter',
     'CategoryChannelConverter',
+    'ForumChannelConverter',
     'IDConverter',
     'ThreadConverter',
     'GuildChannelConverter',
@@ -81,6 +84,7 @@ __all__ = (
     'ScheduledEventConverter',
     'clean_content',
     'Greedy',
+    'Range',
     'run_converters',
 )
 
@@ -151,7 +155,7 @@ class IDConverter(Converter[T_co]):
 class ObjectConverter(IDConverter[selfcord.Object]):
     """Converts to a :class:`~selfcord.Object`.
 
-    The argument must follow the valid ID or mention formats (e.g. `<@80088516616269824>`).
+    The argument must follow the valid ID or mention formats (e.g. ``<@80088516616269824>``).
 
     .. versionadded:: 2.0
 
@@ -231,6 +235,7 @@ class MemberConverter(IDConverter[selfcord.Member]):
         guild = ctx.guild
         result = None
         user_id = None
+
         if match is None:
             # not a mention...
             if guild:
@@ -244,7 +249,7 @@ class MemberConverter(IDConverter[selfcord.Member]):
             else:
                 result = _get_from_guilds(bot, 'get_member', user_id)
 
-        if result is None:
+        if not isinstance(result, selfcord.Member):
             if guild is None:
                 raise MemberNotFound(argument)
 
@@ -256,7 +261,7 @@ class MemberConverter(IDConverter[selfcord.Member]):
             if not result:
                 raise MemberNotFound(argument)
 
-        return result  # type: ignore
+        return result
 
 
 class UserConverter(IDConverter[selfcord.User]):
@@ -333,7 +338,7 @@ class PartialMessageConverter(Converter[selfcord.PartialMessage]):
     """
 
     @staticmethod
-    def _get_id_matches(ctx, argument):
+    def _get_id_matches(ctx: Context[BotT], argument: str) -> Tuple[Optional[int], int, int]:
         id_regex = re.compile(r'(?:(?P<channel_id>[0-9]{15,20})-)?(?P<message_id>[0-9]{15,20})$')
         link_regex = re.compile(
             r'https?://(?:(ptb|canary|www)\.)?discord(?:app)?\.com/channels/'
@@ -375,7 +380,7 @@ class PartialMessageConverter(Converter[selfcord.PartialMessage]):
         guild_id, message_id, channel_id = self._get_id_matches(ctx, argument)
         channel = self._resolve_channel(ctx, guild_id, channel_id)
         if not channel or not isinstance(channel, selfcord.abc.Messageable):
-            raise ChannelNotFound(channel_id)  # type: ignore # channel_id won't be None here
+            raise ChannelNotFound(channel_id)
         return selfcord.PartialMessage(channel=channel, id=message_id)
 
 
@@ -562,7 +567,7 @@ class CategoryChannelConverter(IDConverter[selfcord.CategoryChannel]):
 
 
 class ThreadConverter(IDConverter[selfcord.Thread]):
-    """Coverts to a :class:`~selfcord.Thread`.
+    """Converts to a :class:`~selfcord.Thread`.
 
     All lookups are via the local guild.
 
@@ -577,6 +582,25 @@ class ThreadConverter(IDConverter[selfcord.Thread]):
 
     async def convert(self, ctx: Context[BotT], argument: str) -> selfcord.Thread:
         return GuildChannelConverter._resolve_thread(ctx, argument, 'threads', selfcord.Thread)
+
+
+class ForumChannelConverter(IDConverter[selfcord.ForumChannel]):
+    """Converts to a :class:`~selfcord.ForumChannel`.
+
+    All lookups are via the local guild. If in a DM context, then the lookup
+    is done by the global cache.
+
+    The lookup strategy is as follows (in order):
+
+    1. Lookup by ID.
+    2. Lookup by mention.
+    3. Lookup by name
+
+    .. versionadded:: 2.0
+    """
+
+    async def convert(self, ctx: Context[BotT], argument: str) -> selfcord.ForumChannel:
+        return GuildChannelConverter._resolve_channel(ctx, argument, 'forums', selfcord.ForumChannel)
 
 
 class ColourConverter(Converter[selfcord.Colour]):
@@ -605,61 +629,15 @@ class ColourConverter(Converter[selfcord.Colour]):
         Added support for ``rgb`` function and 3-digit hex shortcuts
     """
 
-    RGB_REGEX = re.compile(r'rgb\s*\((?P<r>[0-9]{1,3}%?)\s*,\s*(?P<g>[0-9]{1,3}%?)\s*,\s*(?P<b>[0-9]{1,3}%?)\s*\)')
-
-    def parse_hex_number(self, argument: str) -> selfcord.Colour:
-        arg = ''.join(i * 2 for i in argument) if len(argument) == 3 else argument
-        try:
-            value = int(arg, base=16)
-            if not (0 <= value <= 0xFFFFFF):
-                raise BadColourArgument(argument)
-        except ValueError:
-            raise BadColourArgument(argument)
-        else:
-            return selfcord.Color(value=value)
-
-    def parse_rgb_number(self, argument: str, number: str) -> int:
-        if number[-1] == '%':
-            value = int(number[:-1])
-            if not (0 <= value <= 100):
-                raise BadColourArgument(argument)
-            return round(255 * (value / 100))
-
-        value = int(number)
-        if not (0 <= value <= 255):
-            raise BadColourArgument(argument)
-        return value
-
-    def parse_rgb(self, argument: str, *, regex: re.Pattern[str] = RGB_REGEX) -> selfcord.Colour:
-        match = regex.match(argument)
-        if match is None:
-            raise BadColourArgument(argument)
-
-        red = self.parse_rgb_number(argument, match.group('r'))
-        green = self.parse_rgb_number(argument, match.group('g'))
-        blue = self.parse_rgb_number(argument, match.group('b'))
-        return selfcord.Color.from_rgb(red, green, blue)
-
     async def convert(self, ctx: Context[BotT], argument: str) -> selfcord.Colour:
-        if argument[0] == '#':
-            return self.parse_hex_number(argument[1:])
-
-        if argument[0:2] == '0x':
-            rest = argument[2:]
-            # Legacy backwards compatible syntax
-            if rest.startswith('#'):
-                return self.parse_hex_number(rest[1:])
-            return self.parse_hex_number(rest)
-
-        arg = argument.lower()
-        if arg[0:3] == 'rgb':
-            return self.parse_rgb(arg)
-
-        arg = arg.replace(' ', '_')
-        method = getattr(selfcord.Colour, arg, None)
-        if arg.startswith('from_') or method is None or not inspect.ismethod(method):
-            raise BadColourArgument(arg)
-        return method()
+        try:
+            return selfcord.Colour.from_str(argument)
+        except ValueError:
+            arg = argument.lower().replace(' ', '_')
+            method = getattr(selfcord.Colour, arg, None)
+            if arg.startswith('from_') or method is None or not inspect.ismethod(method):
+                raise BadColourArgument(arg)
+            return method()
 
 
 ColorConverter = ColourConverter
@@ -698,7 +676,7 @@ class RoleConverter(IDConverter[selfcord.Role]):
 
 
 class GameConverter(Converter[selfcord.Game]):
-    """Converts to :class:`~selfcord.Game`."""
+    """Converts to a :class:`~selfcord.Game`."""
 
     async def convert(self, ctx: Context[BotT], argument: str) -> selfcord.Game:
         return selfcord.Game(name=argument)
@@ -1038,8 +1016,11 @@ class Greedy(List[T]):
             raise TypeError('Greedy[...] only takes a single argument')
         converter = params[0]
 
-        origin = getattr(converter, '__origin__', None)
         args = getattr(converter, '__args__', ())
+        if selfcord.utils.PY_310 and converter.__class__ is types.UnionType:  # type: ignore
+            converter = Union[args]  # type: ignore
+
+        origin = getattr(converter, '__origin__', None)
 
         if not (callable(converter) or isinstance(converter, Converter) or origin is not None):
             raise TypeError('Greedy[...] expects a type or a Converter instance.')
@@ -1051,6 +1032,123 @@ class Greedy(List[T]):
             raise TypeError(f'Greedy[{converter!r}] is invalid.')
 
         return cls(converter=converter)
+
+    @property
+    def constructed_converter(self) -> Any:
+        # Only construct a converter once in order to maintain state between convert calls
+        if (
+            inspect.isclass(self.converter)
+            and issubclass(self.converter, Converter)
+            and not inspect.ismethod(self.converter.convert)
+        ):
+            return self.converter()
+        return self.converter
+
+
+if TYPE_CHECKING:
+    from typing_extensions import Annotated as Range
+else:
+
+    class Range:
+        """A special converter that can be applied to a parameter to require a numeric
+        or string type to fit within the range provided.
+
+        During type checking time this is equivalent to :obj:`typing.Annotated` so type checkers understand
+        the intent of the code.
+
+        Some example ranges:
+
+        - ``Range[int, 10]`` means the minimum is 10 with no maximum.
+        - ``Range[int, None, 10]`` means the maximum is 10 with no minimum.
+        - ``Range[int, 1, 10]`` means the minimum is 1 and the maximum is 10.
+        - ``Range[float, 1.0, 5.0]`` means the minimum is 1.0 and the maximum is 5.0.
+        - ``Range[str, 1, 10]`` means the minimum length is 1 and the maximum length is 10.
+
+        If the value cannot be converted to the provided type or is outside the given range,
+        :class:`~.ext.commands.BadArgument` or :class:`~.ext.commands.RangeError` is raised to
+        the appropriate error handlers respectively.
+
+        .. versionadded:: 2.0
+
+        Examples
+        ----------
+
+        .. code-block:: python3
+
+            @bot.command()
+            async def range(ctx: commands.Context, value: commands.Range[int, 10, 12]):
+                await ctx.send(f'Your value is {value}')
+        """
+
+        def __init__(
+            self,
+            *,
+            annotation: Any,
+            min: Optional[Union[int, float]] = None,
+            max: Optional[Union[int, float]] = None,
+        ) -> None:
+            self.annotation: Any = annotation
+            self.min: Optional[Union[int, float]] = min
+            self.max: Optional[Union[int, float]] = max
+
+        async def convert(self, ctx: Context[BotT], value: str) -> Union[int, float]:
+            try:
+                count = converted = self.annotation(value)
+            except ValueError:
+                raise BadArgument(
+                    f'Converting to "{self.annotation.__name__}" failed for parameter "{ctx.current_parameter.name}".'
+                )
+
+            if self.annotation is str:
+                count = len(value)
+
+            if (self.min is not None and count < self.min) or (self.max is not None and count > self.max):
+                raise RangeError(converted, minimum=self.min, maximum=self.max)
+
+            return converted
+
+        def __call__(self) -> None:
+            # Trick to allow it inside typing.Union
+            pass
+
+        def __or__(self, rhs) -> Any:
+            return Union[self, rhs]
+
+        def __repr__(self) -> str:
+            return f'{self.__class__.__name__}[{self.annotation.__name__}, {self.min}, {self.max}]'
+
+        def __class_getitem__(cls, obj) -> Range:
+            if not isinstance(obj, tuple):
+                raise TypeError(f'expected tuple for arguments, received {obj.__class__!r} instead')
+
+            if len(obj) == 2:
+                obj = (*obj, None)
+            elif len(obj) != 3:
+                raise TypeError('Range accepts either two or three arguments with the first being the type of range.')
+
+            annotation, min, max = obj
+
+            if min is None and max is None:
+                raise TypeError('Range must not be empty')
+
+            if min is not None and max is not None:
+                # At this point max and min are both not none
+                if type(min) != type(max):
+                    raise TypeError('Both min and max in Range must be the same type')
+
+            if annotation not in (int, float, str):
+                raise TypeError(f'expected int, float, or str as range type, received {annotation!r} instead')
+
+            if annotation in (str, int):
+                cast = int
+            else:
+                cast = float
+
+            return cls(
+                annotation=annotation,
+                min=cast(min) if min is not None else None,
+                max=cast(max) if max is not None else None,
+            )
 
 
 def _convert_to_bool(argument: str) -> bool:
@@ -1091,10 +1189,11 @@ CONVERTER_MAPPING: Dict[type, Any] = {
     selfcord.abc.GuildChannel: GuildChannelConverter,
     selfcord.GuildSticker: GuildStickerConverter,
     selfcord.ScheduledEvent: ScheduledEventConverter,
+    selfcord.ForumChannel: ForumChannelConverter,
 }
 
 
-async def _actual_conversion(ctx: Context[BotT], converter, argument: str, param: inspect.Parameter):
+async def _actual_conversion(ctx: Context[BotT], converter: Any, argument: str, param: inspect.Parameter):
     if converter is bool:
         return _convert_to_bool(argument)
 
@@ -1111,7 +1210,7 @@ async def _actual_conversion(ctx: Context[BotT], converter, argument: str, param
             if inspect.ismethod(converter.convert):
                 return await converter.convert(ctx, argument)
             else:
-                return await converter().convert(ctx, argument)  # type: ignore
+                return await converter().convert(ctx, argument)
         elif isinstance(converter, Converter):
             return await converter.convert(ctx, argument)  # type: ignore
     except CommandError:
@@ -1127,9 +1226,21 @@ async def _actual_conversion(ctx: Context[BotT], converter, argument: str, param
         try:
             name = converter.__name__
         except AttributeError:
-            name = converter.__class__.__name__  # type: ignore
+            name = converter.__class__.__name__
 
         raise BadArgument(f'Converting to "{name}" failed for parameter "{param.name}".') from exc
+
+
+@overload
+async def run_converters(
+    ctx: Context[BotT], converter: Union[Type[Converter[T]], Converter[T]], argument: str, param: Parameter
+) -> T:
+    ...
+
+
+@overload
+async def run_converters(ctx: Context[BotT], converter: Any, argument: str, param: Parameter) -> Any:
+    ...
 
 
 async def run_converters(ctx: Context[BotT], converter: Any, argument: str, param: Parameter) -> Any:
@@ -1208,7 +1319,7 @@ async def run_converters(ctx: Context[BotT], converter: Any, argument: str, para
                 return value
 
         # if we're here, then we failed to match all the literals
-        raise BadLiteralArgument(param, literal_args, errors)
+        raise BadLiteralArgument(param, literal_args, errors, argument)
 
     # This must be the last if-clause in the chain of origin checking
     # Nearly every type is a generic type within the typing library

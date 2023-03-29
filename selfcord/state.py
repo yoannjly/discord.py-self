@@ -43,6 +43,7 @@ from typing import (
     Deque,
     Literal,
     overload,
+    Sequence,
 )
 import weakref
 import inspect
@@ -92,6 +93,8 @@ from .payments import Payment
 from .entitlements import Entitlement, Gift
 from .guild_premium import PremiumGuildSubscriptionSlot
 from .library import LibraryApplication
+from .automod import AutoModRule, AutoModAction
+from .audit_logs import AuditLogEntry
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -99,13 +102,14 @@ if TYPE_CHECKING:
     from .abc import PrivateChannel, Snowflake as abcSnowflake
     from .activity import ActivityTypes
     from .message import MessageableChannel
-    from .guild import GuildChannel, VocalGuildChannel
+    from .guild import GuildChannel
     from .http import HTTPClient
     from .voice_client import VoiceProtocol
     from .client import Client
     from .gateway import DiscordWebSocket
     from .calls import Call
 
+    from .types.automod import AutoModerationRule, AutoModerationActionExecution
     from .types.snowflake import Snowflake
     from .types.activity import Activity as ActivityPayload
     from .types.application import Achievement as AchievementPayload, IntegrationApplication as IntegrationApplicationPayload
@@ -120,7 +124,7 @@ if TYPE_CHECKING:
     from .types.activity import ClientStatus as ClientStatusPayload
 
     T = TypeVar('T')
-    Channel = Union[GuildChannel, VocalGuildChannel, PrivateChannel, PartialMessageable, ForumChannel]
+    Channel = Union[GuildChannel, PrivateChannel, PartialMessageable]
 
 MISSING = utils.MISSING
 _log = logging.getLogger(__name__)
@@ -575,7 +579,7 @@ class ConnectionState:
         self._status: Optional[str] = status
 
         if cache_flags._empty:
-            self.store_user = self.create_user  # type: ignore # This reassignment is on purpose
+            self.store_user = self.create_user
 
         self.parsers: Dict[str, Callable[[Any], None]]
         self.parsers = parsers = {}
@@ -759,8 +763,8 @@ class ConnectionState:
         return sticker
 
     @property
-    def guilds(self) -> List[Guild]:
-        return list(self._guilds.values())
+    def guilds(self) -> Sequence[Guild]:
+        return utils.SequenceProxy(self._guilds.values())
 
     def _get_guild(self, guild_id: Optional[int]) -> Optional[Guild]:
         # The keys of self._guilds are ints
@@ -768,6 +772,9 @@ class ConnectionState:
         if guild is None:
             guild = self._queued_guilds.get(guild_id)  # type: ignore
         return guild
+
+    def _get_or_create_unavailable_guild(self, guild_id: int) -> Guild:
+        return self._guilds.get(guild_id) or Guild._create_unavailable(state=self, guild_id=guild_id)
 
     def _add_guild(self, guild: Guild) -> None:
         self._guilds[guild.id] = guild
@@ -784,12 +791,12 @@ class ConnectionState:
         del guild
 
     @property
-    def emojis(self) -> List[Emoji]:
-        return list(self._emojis.values())
+    def emojis(self) -> Sequence[Emoji]:
+        return utils.SequenceProxy(self._emojis.values())
 
     @property
-    def stickers(self) -> List[GuildSticker]:
-        return list(self._stickers.values())
+    def stickers(self) -> Sequence[GuildSticker]:
+        return utils.SequenceProxy(self._stickers.values())
 
     def get_emoji(self, emoji_id: Optional[int]) -> Optional[Emoji]:
         # the keys of self._emojis are ints
@@ -800,8 +807,8 @@ class ConnectionState:
         return self._stickers.get(sticker_id)  # type: ignore
 
     @property
-    def private_channels(self) -> List[PrivateChannel]:
-        return list(self._private_channels.values())
+    def private_channels(self) -> Sequence[PrivateChannel]:
+        return utils.SequenceProxy(self._private_channels.values())
 
     async def call_connect(self, channel_id: int) -> None:
         if self.ws is None:
@@ -873,7 +880,7 @@ class ConnectionState:
         else:
             channel = guild and guild._resolve_channel(channel_id)
 
-        return channel or PartialMessageable(state=self, id=channel_id), guild
+        return channel or PartialMessageable(state=self, guild_id=guild_id, id=channel_id), guild
 
     async def _delete_messages(self, channel_id, messages, reason: Optional[str] = None) -> None:
         delete_message = self.http.delete_message
@@ -1450,7 +1457,7 @@ class ConnectionState:
                     for s in guild.scheduled_events:
                         if s.channel_id == channel.id:
                             guild._scheduled_events.pop(s.id)
-                            self.dispatch('scheduled_event_delete', guild, s)
+                            self.dispatch('scheduled_event_delete', s)
         else:
             channel = self._get_private_channel(channel_id)
             if channel is not None:
@@ -1589,8 +1596,10 @@ class ConnectionState:
             _log.debug('THREAD_DELETE referencing an unknown guild ID: %s. Discarding', guild_id)
             return
 
-        thread_id = int(data['id'])
-        thread = guild.get_thread(thread_id)
+        raw = RawThreadDeleteEvent(data)
+        raw.thread = thread = guild.get_thread(raw.thread_id)
+        self.dispatch('raw_thread_delete', raw)
+
         if thread is not None:
             guild._remove_thread(thread)
             self.dispatch('thread_delete', thread)
@@ -1673,6 +1682,7 @@ class ConnectionState:
 
         thread_id = int(data['id'])
         thread: Optional[Thread] = guild.get_thread(thread_id)
+        raw = RawThreadMembersUpdate(data)
         if thread is None:
             _log.debug('THREAD_MEMBERS_UPDATE referencing an unknown thread ID: %s. Discarding.', thread_id)
             return
@@ -1691,6 +1701,7 @@ class ConnectionState:
         for member_id in removed_member_ids:
             member = thread._pop_member(member_id)
             if member_id != self_id:
+                self.dispatch('raw_thread_member_remove', raw)
                 if member is not None:
                     self.dispatch('thread_member_remove', member)
                 else:
@@ -1968,6 +1979,57 @@ class ConnectionState:
 
         guild.stickers = tuple(map(lambda d: self.store_sticker(guild, d), data['stickers']))
         self.dispatch('guild_stickers_update', guild, before_stickers, guild.stickers)
+
+    def parse_guild_audit_log_entry_create(self, data: gw.GuildAuditLogEntryCreate) -> None:
+        guild = self._get_guild(int(data['guild_id']))
+        if guild is None:
+            _log.debug('GUILD_AUDIT_LOG_ENTRY_CREATE referencing an unknown guild ID: %s. Discarding.', data['guild_id'])
+            return
+
+        entry = AuditLogEntry(
+            users=self._users,
+            automod_rules={},
+            data=data,
+            guild=guild,
+        )
+
+        self.dispatch('audit_log_entry_create', entry)
+
+    def parse_auto_moderation_rule_create(self, data: AutoModerationRule) -> None:
+        guild = self._get_guild(int(data['guild_id']))
+        if guild is None:
+            _log.debug('AUTO_MODERATION_RULE_CREATE referencing an unknown guild ID: %s. Discarding.', data['guild_id'])
+            return
+
+        rule = AutoModRule(data=data, guild=guild, state=self)
+        self.dispatch('automod_rule_create', rule)
+
+    def parse_auto_moderation_rule_update(self, data: AutoModerationRule) -> None:
+        guild = self._get_guild(int(data['guild_id']))
+        if guild is None:
+            _log.debug('AUTO_MODERATION_RULE_UPDATE referencing an unknown guild ID: %s. Discarding.', data['guild_id'])
+            return
+
+        rule = AutoModRule(data=data, guild=guild, state=self)
+        self.dispatch('automod_rule_update', rule)
+
+    def parse_auto_moderation_rule_delete(self, data: AutoModerationRule) -> None:
+        guild = self._get_guild(int(data['guild_id']))
+        if guild is None:
+            _log.debug('AUTO_MODERATION_RULE_DELETE referencing an unknown guild ID: %s. Discarding.', data['guild_id'])
+            return
+
+        rule = AutoModRule(data=data, guild=guild, state=self)
+        self.dispatch('automod_rule_delete', rule)
+
+    def parse_auto_moderation_action_execution(self, data: AutoModerationActionExecution) -> None:
+        guild = self._get_guild(int(data['guild_id']))
+        if guild is None:
+            _log.debug('AUTO_MODERATION_ACTION_EXECUTION referencing an unknown guild ID: %s. Discarding.', data['guild_id'])
+            return
+
+        execution = AutoModAction(data=data, state=self)
+        self.dispatch('automod_action', execution)
 
     def _get_create_guild(self, data: gw.GuildCreateEvent):
         guild = self._get_guild(int(data['id']))
@@ -2260,7 +2322,7 @@ class ConnectionState:
             _log.debug('GUILD_INTEGRATIONS_UPDATE referencing an unknown guild ID: %s. Discarding.', data['guild_id'])
 
     def parse_integration_create(self, data: gw.IntegrationCreateEvent) -> None:
-        guild_id = int(data.pop('guild_id'))
+        guild_id = int(data['guild_id'])
         guild = self._get_guild(guild_id)
         if guild is not None:
             cls, _ = _integration_factory(data['type'])
@@ -2270,7 +2332,7 @@ class ConnectionState:
             _log.debug('INTEGRATION_CREATE referencing an unknown guild ID: %s. Discarding.', guild_id)
 
     def parse_integration_update(self, data: gw.IntegrationUpdateEvent) -> None:
-        guild_id = int(data.pop('guild_id'))
+        guild_id = int(data['guild_id'])
         guild = self._get_guild(guild_id)
         if guild is not None:
             cls, _ = _integration_factory(data['type'])
@@ -2569,7 +2631,7 @@ class ConnectionState:
     # parse_guild_application_commands_update = parse_nothing  # Grabbed directly in command iterators
 
     def _get_reaction_user(self, channel: MessageableChannel, user_id: int) -> Optional[Union[User, Member]]:
-        if isinstance(channel, TextChannel):
+        if isinstance(channel, (TextChannel, Thread, VoiceChannel, StageChannel)):
             return channel.guild.get_member(user_id)
         return self.get_user(user_id)
 
@@ -2611,6 +2673,20 @@ class ConnectionState:
 
     def create_message(self, *, channel: MessageableChannel, data: MessagePayload) -> Message:
         return Message(state=self, channel=channel, data=data)
+
+    def _update_message_references(self) -> None:
+        # self._messages won't be None when this is called
+        for msg in self._messages:  # type: ignore
+            if not msg.guild:
+                continue
+
+            new_guild = self._get_guild(msg.guild.id)
+            if new_guild is not None and new_guild is not msg.guild:
+                channel_id = msg.channel.id
+                channel = new_guild._resolve_channel(channel_id) or PartialMessageable(
+                    state=self, id=channel_id, guild_id=new_guild.id
+                )
+                msg._rebind_cached_references(new_guild, channel)
 
     def create_integration_application(self, data: IntegrationApplicationPayload) -> IntegrationApplication:
         return IntegrationApplication(state=self, data=data)

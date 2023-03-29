@@ -24,17 +24,19 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Iterable, List, Optional, Union, TYPE_CHECKING
+from typing import Callable, Dict, Iterable, List, Literal, Optional, Sequence, Union, TYPE_CHECKING
 from datetime import datetime
 import asyncio
+import array
 import copy
 
 from .mixins import Hashable
-from .abc import Messageable, _purge_helper
+from .abc import Messageable, GuildChannel, _purge_helper
 from .enums import ChannelType, try_enum
 from .errors import ClientException, InvalidData
 from .flags import ChannelFlags
-from .utils import MISSING, parse_time, snowflake_time, _get_as_snowflake
+from .permissions import Permissions
+from .utils import MISSING, parse_time, snowflake_time, _get_as_snowflake, _unique
 
 __all__ = (
     'Thread',
@@ -52,12 +54,11 @@ if TYPE_CHECKING:
         ThreadArchiveDuration,
     )
     from .guild import Guild
-    from .channel import TextChannel, CategoryChannel, ForumChannel
+    from .channel import TextChannel, CategoryChannel, ForumChannel, ForumTag
     from .member import Member
     from .message import Message, PartialMessage
     from .abc import Snowflake, SnowflakeTime
     from .role import Role
-    from .permissions import Permissions
     from .state import ConnectionState
 
 
@@ -91,9 +92,9 @@ class Thread(Messageable, Hashable):
     guild: :class:`Guild`
         The guild the thread belongs to.
     id: :class:`int`
-        The thread ID.
+        The thread ID. This is the same as the thread starter message ID.
     parent_id: :class:`int`
-        The ID of the parent :class:`TextChannel` this thread belongs to.
+        The ID of the parent :class:`TextChannel` or :class:`ForumChannel` this thread belongs to.
     owner_id: :class:`int`
         The ID of the user that created this thread.
     last_message_id: Optional[:class:`int`]
@@ -101,11 +102,11 @@ class Thread(Messageable, Hashable):
         *not* point to an existing or valid message.
     slowmode_delay: :class:`int`
         The number of seconds a member must wait between sending messages
-        in this thread. A value of `0` denotes that it is disabled.
+        in this thread. A value of ``0`` denotes that it is disabled.
         Bots and users with :attr:`~Permissions.manage_channels` or
         :attr:`~Permissions.manage_messages` bypass slowmode.
     message_count: :class:`int`
-        An approximate number of messages in this thread. This caps at 50.
+        An approximate number of messages in this thread.
     member_count: :class:`int`
         An approximate number of members in this thread. This caps at 50.
     archived: :class:`bool`
@@ -143,6 +144,7 @@ class Thread(Messageable, Hashable):
         '_member_ids',
         '_created_at',
         '_flags',
+        '_applied_tags',
     )
 
     def __init__(self, *, guild: Guild, state: ConnectionState, data: ThreadPayload) -> None:
@@ -175,6 +177,8 @@ class Thread(Messageable, Hashable):
         self.member_count: int = data['member_count']
         self._member_ids: List[Union[str, int]] = data['member_ids_preview']
         self._flags: int = data.get('flags', 0)
+        # SnowflakeList is sorted, but this would not be proper for applied tags, where order actually matters.
+        self._applied_tags: array.array[int] = array.array('Q', map(int, data.get('applied_tags', [])))
         self._unroll_metadata(data['thread_metadata'])
 
     def _unroll_metadata(self, data: ThreadMetadata):
@@ -188,6 +192,8 @@ class Thread(Messageable, Hashable):
     def _update(self, data):
         old = copy.copy(self)
         self.slowmode_delay = data.get('rate_limit_per_user', 0)
+        self._flags: int = data.get('flags', 0)
+        self._applied_tags: array.array[int] = array.array('Q', map(int, data.get('applied_tags', [])))
 
         if (meta := data.get('thread_metadata')) is not None:
             self._unroll_metadata(meta)
@@ -248,9 +254,15 @@ class Thread(Messageable, Hashable):
         """:class:`datetime.datetime`: Returns the thread's creation time in UTC.
 
         .. note::
+
             This may be inaccurate for threads created before January 9th, 2022.
         """
         return self._created_at or snowflake_time(self.id)
+
+    @property
+    def jump_url(self) -> str:
+        """:class:`str`: Returns a URL that allows the client to jump to the thread."""
+        return f'https://discord.com/channels/{self.guild.id}/{self.id}'
 
     @property
     def members(self) -> List[ThreadMember]:
@@ -261,8 +273,38 @@ class Thread(Messageable, Hashable):
         return list(self._members.values())
 
     @property
+    def applied_tags(self) -> List[ForumTag]:
+        """List[:class:`ForumTag`]: A list of tags applied to this thread."""
+        tags = []
+        if self.parent is None or self.parent.type != ChannelType.forum:
+            return tags
+
+        parent = self.parent
+        for tag_id in self._applied_tags:
+            tag = parent.get_tag(tag_id)  # type: ignore
+            if tag is not None:
+                tags.append(tag)
+
+        return tags
+
+    @property
+    def starter_message(self) -> Optional[Message]:
+        """Returns the thread starter message from the cache.
+
+        The message might not be cached, valid, or point to an existing message.
+
+        Note that the thread starter message ID is the same ID as the thread.
+
+        Returns
+        --------
+        Optional[:class:`Message`]
+            The thread starter message or ``None`` if not found.
+        """
+        return self._state._get_message(self.id)
+
+    @property
     def last_message(self) -> Optional[Message]:
-        """Fetches the last message from this channel in cache.
+        """Returns the last message from this thread from the cache.
 
         The message might not be valid or point to an existing message.
 
@@ -363,10 +405,9 @@ class Thread(Messageable, Hashable):
         """Handles permission resolution for the :class:`~selfcord.Member`
         or :class:`~selfcord.Role`.
 
-        Since threads do not have their own permissions, they inherit them
-        from the parent channel. This is a convenience method for
-        calling :meth:`~selfcord.TextChannel.permissions_for` on the
-        parent channel.
+        Since threads do not have their own permissions, they mostly
+        inherit them from the parent channel with some implicit
+        permissions changed.
 
         Parameters
         ----------
@@ -389,7 +430,23 @@ class Thread(Messageable, Hashable):
         parent = self.parent
         if parent is None:
             raise ClientException('Parent channel not found')
-        return parent.permissions_for(obj)
+
+        base = GuildChannel.permissions_for(parent, obj)
+
+        # if you can't send a message in a channel then you can't have certain
+        # permissions as well
+        if not base.send_messages_in_threads:
+            base.send_tts_messages = False
+            base.mention_everyone = False
+            base.embed_links = False
+            base.attach_files = False
+
+        # if you can't read a channel then you have no permissions there
+        if not base.read_messages:
+            denied = Permissions.all_channel()
+            base.value &= ~denied.value
+
+        return base
 
     async def delete_messages(self, messages: Iterable[Snowflake], /, *, reason: Optional[str] = None) -> None:
         """|coro|
@@ -397,8 +454,7 @@ class Thread(Messageable, Hashable):
         Deletes a list of messages. This is similar to :meth:`Message.delete`
         except it bulk deletes multiple messages.
 
-        You must have the :attr:`~Permissions.manage_messages` permission to
-        use this (unless they're your own).
+        You must have :attr:`~Permissions.manage_messages` to use this (unless they're your own).
 
         .. note::
             Users do not have access to the message bulk-delete endpoint.
@@ -435,7 +491,7 @@ class Thread(Messageable, Hashable):
         before: Optional[SnowflakeTime] = None,
         after: Optional[SnowflakeTime] = None,
         around: Optional[SnowflakeTime] = None,
-        oldest_first: Optional[bool] = False,
+        oldest_first: Optional[bool] = None,
         reason: Optional[str] = None,
     ) -> List[Message]:
         """|coro|
@@ -444,7 +500,7 @@ class Thread(Messageable, Hashable):
         ``check``. If a ``check`` is not provided then all messages are deleted
         without discrimination.
 
-        The :attr:`~Permissions.read_message_history` permission is needed to
+        Having :attr:`~Permissions.read_message_history` is needed to
         retrieve message history.
 
         Examples
@@ -510,6 +566,7 @@ class Thread(Messageable, Hashable):
         pinned: bool = MISSING,
         slowmode_delay: int = MISSING,
         auto_archive_duration: ThreadArchiveDuration = MISSING,
+        applied_tags: Sequence[ForumTag] = MISSING,
         reason: Optional[str] = None,
     ) -> Thread:
         """|coro|
@@ -542,6 +599,8 @@ class Thread(Messageable, Hashable):
         slowmode_delay: :class:`int`
             Specifies the slowmode rate limit for user in this thread, in seconds.
             A value of ``0`` disables slowmode. The maximum value possible is ``21600``.
+        applied_tags: Sequence[:class:`ForumTag`]
+            The new tags to apply to the thread. There can only be up to 5 tags applied to a thread.
         reason: Optional[:class:`str`]
             The reason for editing this thread. Shows up on the audit log.
 
@@ -574,10 +633,82 @@ class Thread(Messageable, Hashable):
             flags = self.flags
             flags.pinned = pinned
             payload['flags'] = flags.value
+        if applied_tags is not MISSING:
+            payload['applied_tags'] = [str(tag.id) for tag in applied_tags]
 
         data = await self._state.http.edit_channel(self.id, **payload, reason=reason)
         # The data payload will always be a Thread payload
         return Thread(data=data, state=self._state, guild=self.guild)  # type: ignore
+
+    async def add_tags(self, *tags: Snowflake, reason: Optional[str] = None) -> None:
+        r"""|coro|
+
+        Adds the given forum tags to a thread.
+
+        You must have :attr:`~Permissions.manage_threads` to
+        use this or the thread must be owned by you.
+
+        Tags that have :attr:`ForumTag.moderated` set to ``True`` require
+        :attr:`~Permissions.manage_threads` to be added.
+
+        The maximum number of tags that can be added to a thread is 5.
+
+        The parent channel must be a :class:`ForumChannel`.
+
+        Parameters
+        -----------
+        \*tags: :class:`abc.Snowflake`
+            An argument list of :class:`abc.Snowflake` representing a :class:`ForumTag`
+            to add to the thread.
+        reason: Optional[:class:`str`]
+            The reason for adding these tags.
+
+        Raises
+        -------
+        Forbidden
+            You do not have permissions to add these tags.
+        HTTPException
+            Adding tags failed.
+        """
+
+        applied_tags = [str(tag) for tag in self._applied_tags]
+        applied_tags.extend(str(tag.id) for tag in tags)
+
+        await self._state.http.edit_channel(self.id, applied_tags=_unique(applied_tags), reason=reason)
+
+    async def remove_tags(self, *tags: Snowflake, reason: Optional[str] = None) -> None:
+        r"""|coro|
+
+        Remove the given forum tags to a thread.
+
+        You must have :attr:`~Permissions.manage_threads` to
+        use this or the thread must be owned by you.
+
+        The parent channel must be a :class:`ForumChannel`.
+
+        Parameters
+        -----------
+        \*tags: :class:`abc.Snowflake`
+            An argument list of :class:`abc.Snowflake` representing a :class:`ForumTag`
+            to remove to the thread.
+        reason: Optional[:class:`str`]
+            The reason for removing these tags.
+
+        Raises
+        -------
+        Forbidden
+            You do not have permissions to remove these tags.
+        HTTPException
+            Removing tags failed.
+        """
+
+        # Once again, taking advantage of the fact that dicts are ordered since 3.7
+        applied_tags: Dict[str, Literal[None]] = {str(tag): None for tag in self._applied_tags}
+
+        for tag in tags:
+            applied_tags.pop(str(tag.id), None)
+
+        await self._state.http.edit_channel(self.id, applied_tags=list(applied_tags.keys()), reason=reason)
 
     async def join(self) -> None:
         """|coro|
@@ -614,7 +745,7 @@ class Thread(Messageable, Hashable):
         Adds a user to this thread.
 
         You must have :attr:`~Permissions.send_messages_in_threads` to add a user to a thread.
-        If the thread is private then and :attr:`invitable` is ``False`` then :attr:`~Permissions.manage_messages`
+        If the thread is private and :attr:`invitable` is ``False`` then :attr:`~Permissions.manage_messages`
         is required to add a user to the thread.
 
         Parameters
@@ -704,8 +835,6 @@ class Thread(Messageable, Hashable):
         This is useful if you want to work with a message and only have its ID without
         doing an unnecessary API call.
 
-        .. versionadded:: 2.0
-
         Parameters
         ------------
         message_id: :class:`int`
@@ -720,11 +849,11 @@ class Thread(Messageable, Hashable):
 
         return PartialMessage(channel=self, id=message_id)
 
-    def _add_member(self, member: ThreadMember) -> None:
+    def _add_member(self, member: ThreadMember, /) -> None:
         if member.id != self._state.self_id:
             self._members[member.id] = member
 
-    def _pop_member(self, member_id: int) -> Optional[ThreadMember]:
+    def _pop_member(self, member_id: int, /) -> Optional[ThreadMember]:
         return self._members.pop(member_id, None)
 
 

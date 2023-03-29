@@ -35,6 +35,7 @@ import zlib
 from typing import Any, Callable, Coroutine, Dict, List, TYPE_CHECKING, NamedTuple, Optional, TypeVar
 
 import aiohttp
+import yarl
 
 from . import utils
 from .activity import BaseActivity, Spotify
@@ -286,13 +287,14 @@ class DiscordWebSocket:
         _initial_identify: bool
         shard_id: Optional[int]
         shard_count: Optional[int]
-        gateway: str
+        gateway: yarl.URL
         _max_heartbeat_timeout: float
         _user_agent: str
         _super_properties: Dict[str, Any]
         _zlib_enabled: bool
 
     # fmt: off
+    DEFAULT_GATEWAY    = yarl.URL('wss://gateway.discord.gg/')
     DISPATCH           = 0
     HEARTBEAT          = 1
     IDENTIFY           = 2
@@ -354,17 +356,28 @@ class DiscordWebSocket:
         client: Client,
         *,
         initial: bool = False,
-        gateway: Optional[str] = None,
+        gateway: Optional[yarl.URL] = None,
         session: Optional[str] = None,
         sequence: Optional[int] = None,
         resume: bool = False,
+        encoding: str = 'json',
+        zlib: bool = True,
     ) -> Self:
         """Creates a main websocket for Discord from a :class:`Client`.
 
         This is for internal use only.
         """
-        gateway = gateway or await client.http.get_gateway()
-        socket = await client.http.ws_connect(gateway)
+        # Circular import
+        from .http import INTERNAL_API_VERSION
+
+        gateway = gateway or cls.DEFAULT_GATEWAY
+
+        if zlib:
+            url = gateway.with_query(v=INTERNAL_API_VERSION, encoding=encoding, compress='zlib-stream')
+        else:
+            url = gateway.with_query(v=INTERNAL_API_VERSION, encoding=encoding)
+
+        socket = await client.http.ws_connect(str(url))
         ws = cls(socket, loop=client.loop)
 
         # Dynamically add attributes needed
@@ -380,7 +393,7 @@ class DiscordWebSocket:
         ws._max_heartbeat_timeout = client._connection.heartbeat_timeout
         ws._user_agent = client.http.user_agent
         ws._super_properties = client.http.super_properties
-        ws._zlib_enabled = client.http.zlib
+        ws._zlib_enabled = zlib
 
         if client._enable_debug_events:
             ws.send = ws.debug_send
@@ -475,7 +488,7 @@ class DiscordWebSocket:
 
         await self.call_hooks('before_identify', initial=self._initial_identify)
         await self.send_as_json(payload)
-        _log.info('Gateway has sent the IDENTIFY payload.')
+        _log.debug('Gateway has sent the IDENTIFY payload.')
 
     async def resume(self) -> None:
         """Sends the RESUME packet."""
@@ -489,7 +502,7 @@ class DiscordWebSocket:
         }
 
         await self.send_as_json(payload)
-        _log.info('Gateway has sent the RESUME payload.')
+        _log.debug('Gateway has sent the RESUME payload.')
 
     async def received_message(self, msg: Any, /) -> None:
         if type(msg) is bytes:
@@ -553,6 +566,7 @@ class DiscordWebSocket:
 
                 self.sequence = None
                 self.session_id = None
+                self.gateway = self.DEFAULT_GATEWAY
                 _log.info('Gateway session has been invalidated.')
                 await self.close(code=1000)
                 raise ReconnectWebSocket(resume=False)
@@ -564,6 +578,7 @@ class DiscordWebSocket:
             self._trace = trace = data.get('_trace', [])
             self.sequence = msg['s']
             self.session_id = data['session_id']
+            self.gateway = yarl.URL(data['resume_gateway_url'])
             _log.info('Connected to Gateway: %s (Session ID: %s).', ', '.join(trace), self.session_id)
             await self.voice_state()  # Initial OP 4
 
@@ -641,15 +656,15 @@ class DiscordWebSocket:
                 self._keep_alive = None
 
             if isinstance(e, asyncio.TimeoutError):
-                _log.info('Timed out receiving packet. Attempting a reconnect.')
+                _log.debug('Timed out receiving packet. Attempting a reconnect.')
                 raise ReconnectWebSocket from None
 
             code = self._close_code or self.socket.close_code
             if self._can_handle_close():
-                _log.info('Websocket closed with %s, attempting a reconnect.', code)
+                _log.debug('Websocket closed with %s, attempting a reconnect.', code)
                 raise ReconnectWebSocket from None
             else:
-                _log.info('Websocket closed with %s, cannot reconnect.', code)
+                _log.debug('Websocket closed with %s, cannot reconnect.', code)
                 raise ConnectionClosed(self.socket, code=code) from None
 
     async def debug_send(self, data: str, /) -> None:
@@ -912,7 +927,7 @@ class DiscordVoiceWebSocket:
         self._close_code: Optional[int] = None
         self.secret_key: Optional[str] = None
         if hook:
-            self._hook = hook  # type: ignore # type-checker doesn't like overriding methods
+            self._hook = hook
 
     async def _hook(self, *args: Any) -> None:
         pass
@@ -1000,6 +1015,7 @@ class DiscordVoiceWebSocket:
             'd': {
                 'speaking': int(state),
                 'delay': 0,
+                'ssrc': self._connection.ssrc,
             },
         }
 
@@ -1016,7 +1032,7 @@ class DiscordVoiceWebSocket:
             if self._keep_alive:
                 self._keep_alive.ack()
         elif op == self.RESUMED:
-            _log.info('Voice RESUME succeeded.')
+            _log.debug('Voice RESUME succeeded.')
         elif op == self.SESSION_DESCRIPTION:
             self._connection.mode = data['mode']
             await self.load_secret_key(data)
@@ -1033,29 +1049,29 @@ class DiscordVoiceWebSocket:
         state.voice_port = data['port']
         state.endpoint_ip = data['ip']
 
-        packet = bytearray(70)
+        packet = bytearray(74)
         struct.pack_into('>H', packet, 0, 1)  # 1 = Send
         struct.pack_into('>H', packet, 2, 70)  # 70 = Length
         struct.pack_into('>I', packet, 4, state.ssrc)
         state.socket.sendto(packet, (state.endpoint_ip, state.voice_port))
-        recv = await self.loop.sock_recv(state.socket, 70)
+        recv = await self.loop.sock_recv(state.socket, 74)
         _log.debug('Received packet in initial_connection: %s.', recv)
 
-        # the ip is ascii starting at the 4th byte and ending at the first null
-        ip_start = 4
+        # The IP is ASCII starting at the 8th byte and ending at the first null
+        ip_start = 8
         ip_end = recv.index(0, ip_start)
         state.ip = recv[ip_start:ip_end].decode('ascii')
 
         state.port = struct.unpack_from('>H', recv, len(recv) - 2)[0]
         _log.debug('Detected ip: %s, port: %s.', state.ip, state.port)
 
-        # there *should* always be at least one supported mode (xsalsa20_poly1305)
+        # There *should* always be at least one supported mode (xsalsa20_poly1305)
         modes = [mode for mode in data['modes'] if mode in self._connection.supported_modes]
         _log.debug('Received supported encryption modes: %s.', ", ".join(modes))
 
         mode = modes[0]
         await self.select_protocol(state.ip, state.port, mode)
-        _log.info('Selected the voice protocol for use: %s.', mode)
+        _log.debug('Selected the voice protocol for use: %s.', mode)
 
     @property
     def latency(self) -> float:
@@ -1073,9 +1089,13 @@ class DiscordVoiceWebSocket:
         return sum(heartbeat.recent_ack_latencies) / len(heartbeat.recent_ack_latencies)
 
     async def load_secret_key(self, data: Dict[str, Any]) -> None:
-        _log.info('Received secret key for voice connection.')
+        _log.debug('Received secret key for voice connection.')
         self.secret_key = self._connection.secret_key = data['secret_key']
-        await self.speak()
+
+        # Send a speak command with the "not speaking" state.
+        # This also tells Discord our SSRC value, which Discord requires
+        # before sending any voice data (and is the real reason why we
+        # call this here).
         await self.speak(SpeakingState.none)
 
     async def poll_event(self) -> None:

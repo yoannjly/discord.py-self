@@ -24,6 +24,7 @@ DEALINGS IN THE SOFTWARE.
 
 from __future__ import annotations
 
+from functools import reduce
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, Iterator, List, Optional, Tuple, Type, TypeVar, overload
 
 from .enums import UserFlags
@@ -54,6 +55,8 @@ __all__ = (
     'FriendDiscoveryFlags',
     'HubProgressFlags',
     'OnboardingProgressFlags',
+    'AutoModPresets',
+    'MemberFlags',
 )
 
 BF = TypeVar('BF', bound='BaseFlags')
@@ -131,6 +134,35 @@ class BaseFlags:
         self.value = value
         return self
 
+    def __or__(self, other: Self) -> Self:
+        return self._from_value(self.value | other.value)
+
+    def __and__(self, other: Self) -> Self:
+        return self._from_value(self.value & other.value)
+
+    def __xor__(self, other: Self) -> Self:
+        return self._from_value(self.value ^ other.value)
+
+    def __ior__(self, other: Self) -> Self:
+        self.value |= other.value
+        return self
+
+    def __iand__(self, other: Self) -> Self:
+        self.value &= other.value
+        return self
+
+    def __ixor__(self, other: Self) -> Self:
+        self.value ^= other.value
+        return self
+
+    def __invert__(self) -> Self:
+        max_bits = max(self.VALID_FLAGS.values()).bit_length()
+        max_value = -1 + (2**max_bits)
+        return self._from_value(self.value ^ max_value)
+
+    def __bool__(self) -> bool:
+        return self.value != self.DEFAULT_VALUE
+
     def __eq__(self, other: object) -> bool:
         return isinstance(other, self.__class__) and self.value == other.value
 
@@ -163,6 +195,17 @@ class BaseFlags:
             raise TypeError(f'Value to set for {self.__class__.__name__} must be a bool.')
 
 
+class ArrayFlags(BaseFlags):
+    @classmethod
+    def _from_value(cls: Type[Self], value: List[int]) -> Self:
+        self = cls.__new__(cls)
+        self.value = reduce(lambda a, b: a | (1 << b - 1), value, 0)
+        return self
+
+    def to_array(self) -> List[int]:
+        return [i + 1 for i in range(self.value.bit_length()) if self.value & (1 << i)]
+
+
 @fill_with_flags()
 class Capabilities(BaseFlags):
     """Wraps up the Discord gateway capabilities.
@@ -179,6 +222,29 @@ class Capabilities(BaseFlags):
         .. describe:: x != y
 
             Checks if two capabilities are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a capabilities instance with all enabled flags from
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x & y, x &= y
+
+            Returns a capabilities instance with only flags enabled on
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x ^ y, x ^= y
+
+            Returns a capabilities instance with only flags enabled on
+            only one of x or y, not on both.
+
+            .. versionadded:: 2.0
+        .. describe:: ~x
+
+            Returns a capabilities instance with all flags inverted from x.
+
+            .. versionadded:: 2.0
         .. describe:: hash(x)
 
                Return the capability's hash.
@@ -186,6 +252,8 @@ class Capabilities(BaseFlags):
 
                Returns an iterator of ``(name, value)`` pairs. This allows it
                to be, for example, constructed as a dict or a list of pairs.
+
+    .. versionadded:: 2.0
 
     Attributes
     -----------
@@ -283,10 +351,33 @@ class SystemChannelFlags(BaseFlags):
 
         .. describe:: x == y
 
-            Checks if two flags are equal.
+            Checks if two SystemChannelFlags are equal.
         .. describe:: x != y
 
-            Checks if two flags are not equal.
+            Checks if two SystemChannelFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a SystemChannelFlags instance with all enabled flags from
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x & y, x &= y
+
+            Returns a SystemChannelFlags instance with only flags enabled on
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x ^ y, x ^= y
+
+            Returns a SystemChannelFlags instance with only flags enabled on
+            only one of x or y, not on both.
+
+            .. versionadded:: 2.0
+        .. describe:: ~x
+
+            Returns a SystemChannelFlags instance with all flags inverted from x.
+
+            .. versionadded:: 2.0
         .. describe:: hash(x)
 
                Return the flag's hash.
@@ -348,6 +439,24 @@ class SystemChannelFlags(BaseFlags):
         """
         return 8
 
+    @flag_value
+    def role_subscription_purchase_notifications(self):
+        """:class:`bool`: Returns ``True`` if role subscription purchase and renewal
+        notifications are enabled.
+
+        .. versionadded:: 2.0
+        """
+        return 16
+
+    @flag_value
+    def role_subscription_purchase_notification_replies(self):
+        """:class:`bool`: Returns ``True`` if the role subscription notifications
+        have a sticker reply button.
+
+        .. versionadded:: 2.0
+        """
+        return 32
+
 
 @fill_with_flags()
 class MessageFlags(BaseFlags):
@@ -359,10 +468,33 @@ class MessageFlags(BaseFlags):
 
         .. describe:: x == y
 
-            Checks if two flags are equal.
+            Checks if two MessageFlags are equal.
         .. describe:: x != y
 
-            Checks if two flags are not equal.
+            Checks if two MessageFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a MessageFlags instance with all enabled flags from
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x & y, x &= y
+
+            Returns a MessageFlags instance with only flags enabled on
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x ^ y, x ^= y
+
+            Returns a MessageFlags instance with only flags enabled on
+            only one of x or y, not on both.
+
+            .. versionadded:: 2.0
+        .. describe:: ~x
+
+            Returns a MessageFlags instance with all flags inverted from x.
+
+            .. versionadded:: 2.0
         .. describe:: hash(x)
 
                Return the flag's hash.
@@ -445,6 +577,39 @@ class MessageFlags(BaseFlags):
         """
         return 256
 
+    @flag_value
+    def link_not_discord_warning(self):
+        """:class:`bool`: Returns ``True`` if this message contains a link that impersonates
+        Discord and should show a warning.
+
+        .. versionadded:: 2.0
+        """
+        return 1024
+
+    @flag_value
+    def suppress_notifications(self):
+        """:class:`bool`: Returns ``True`` if the message will not trigger push and desktop notifications.
+
+        .. versionadded:: 2.0
+        """
+        return 4096
+
+    @alias_flag_value
+    def silent(self):
+        """:class:`bool`: Alias for :attr:`suppress_notifications`.
+
+        .. versionadded:: 2.0
+        """
+        return 4096
+
+    @flag_value
+    def is_voice_message(self):
+        """:class:`bool`: Returns ``True`` if the message's audio attachments are rendered as voice messages.
+
+        .. versionadded:: 2.0
+        """
+        return 8192
+
 
 @fill_with_flags()
 class PublicUserFlags(BaseFlags):
@@ -458,6 +623,29 @@ class PublicUserFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two PublicUserFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a PublicUserFlags instance with all enabled flags from
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x & y, x &= y
+
+            Returns a PublicUserFlags instance with only flags enabled on
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x ^ y, x ^= y
+
+            Returns a PublicUserFlags instance with only flags enabled on
+            only one of x or y, not on both.
+
+            .. versionadded:: 2.0
+        .. describe:: ~x
+
+            Returns a PublicUserFlags instance with all flags inverted from x.
+
+            .. versionadded:: 2.0
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -585,6 +773,14 @@ class PublicUserFlags(BaseFlags):
         """
         return UserFlags.spammer.value
 
+    @flag_value
+    def active_developer(self):
+        """:class:`bool`: Returns ``True`` if the user is an active developer.
+
+        .. versionadded:: 2.0
+        """
+        return UserFlags.active_developer.value
+
     def all(self) -> List[UserFlags]:
         """List[:class:`UserFlags`]: Returns all flags the user has."""
         return [public_flag for public_flag in UserFlags if self._has_flag(public_flag.value)]
@@ -602,6 +798,21 @@ class PrivateUserFlags(PublicUserFlags):
         .. describe:: x != y
 
             Checks if two PrivateUserFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a PrivateUserFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a PrivateUserFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a PrivateUserFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a PrivateUserFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -611,10 +822,10 @@ class PrivateUserFlags(PublicUserFlags):
             to be, for example, constructed as a dict or a list of pairs.
             Note that aliases or inherited flags are not shown.
 
+    .. versionadded:: 2.0
+
     .. note::
         These are only available on your own user flags.
-
-    .. versionadded:: 2.0
 
     Attributes
     -----------
@@ -674,6 +885,21 @@ class PremiumUsageFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two PremiumUsageFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a PremiumUsageFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a PremiumUsageFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a PremiumUsageFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a PremiumUsageFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -723,6 +949,21 @@ class PurchasedFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two PurchasedFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a PurchasedFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a PurchasedFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a PurchasedFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a PurchasedFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -788,6 +1029,30 @@ class MemberCacheFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two flags are not equal.
+
+        .. describe:: x | y, x |= y
+
+            Returns a MemberCacheFlags instance with all enabled flags from
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x & y, x &= y
+
+            Returns a MemberCacheFlags instance with only flags enabled on
+            both x and y.
+
+            .. versionadded:: 2.0
+        .. describe:: x ^ y, x ^= y
+
+            Returns a MemberCacheFlags instance with only flags enabled on
+            only one of x or y, not on both.
+
+            .. versionadded:: 2.0
+        .. describe:: ~x
+
+            Returns a MemberCacheFlags instance with all flags inverted from x.
+
+            .. versionadded:: 2.0
         .. describe:: hash(x)
 
                Return the flag's hash.
@@ -878,6 +1143,21 @@ class ApplicationFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two ApplicationFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns an ApplicationFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns an ApplicationFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns an ApplicationFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns an ApplicationFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1021,10 +1301,22 @@ class ChannelFlags(BaseFlags):
 
         .. describe:: x == y
 
-            Checks if two channel flags are equal.
-        .. describe:: x != y
+            Checks if two ChannelFlags are equal.
+        .. describe:: x | y, x |= y
 
-            Checks if two channel flags are not equal.
+            Returns a ChannelFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a ChannelFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a ChannelFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a ChannelFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1050,6 +1342,15 @@ class ChannelFlags(BaseFlags):
         """:class:`bool`: Returns ``True`` if the thread is pinned to the forum channel."""
         return 1 << 1
 
+    @flag_value
+    def require_tag(self):
+        """:class:`bool`: Returns ``True`` if a tag is required to be specified when creating a thread
+        in a :class:`ForumChannel`.
+
+        .. versionadded:: 2.0
+        """
+        return 1 << 4
+
 
 @fill_with_flags()
 class PaymentSourceFlags(BaseFlags):
@@ -1063,6 +1364,21 @@ class PaymentSourceFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two PaymentSourceFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a PaymentSourceFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a PaymentSourceFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a PaymentSourceFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a PaymentSourceFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1106,6 +1422,21 @@ class SKUFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two SKUFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a SKUFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a SKUFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a SKUFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a SKUFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1187,6 +1518,21 @@ class PaymentFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two PaymentFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a PaymentFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a PaymentFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a PaymentFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a PaymentFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1242,6 +1588,21 @@ class PromotionFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two PromotionFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a PromotionFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a PromotionFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a PromotionFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a PromotionFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1306,10 +1667,25 @@ class GiftFlags(BaseFlags):
 
         .. describe:: x == y
 
-            Checks if two PaymentFlags are equal.
+            Checks if two GiftFlags are equal.
         .. describe:: x != y
 
-            Checks if two PaymentFlags are not equal.
+            Checks if two GiftFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a GiftFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a GiftFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a GiftFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a GiftFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1366,6 +1742,21 @@ class LibraryApplicationFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two LibraryApplicationFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a LibraryApplicationFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a LibraryApplicationFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a LibraryApplicationFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a LibraryApplicationFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1425,6 +1816,21 @@ class ApplicationDiscoveryFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two LibraryApplicationFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a LibraryApplicationFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a LibraryApplicationFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a LibraryApplicationFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a LibraryApplicationFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1545,6 +1951,21 @@ class FriendSourceFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two FriendSourceFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a FriendSourceFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a FriendSourceFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a FriendSourceFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a FriendSourceFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1627,6 +2048,21 @@ class FriendDiscoveryFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two FriendDiscoveryFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a FriendDiscoveryFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a FriendDiscoveryFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a FriendDiscoveryFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a FriendDiscoveryFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1686,6 +2122,21 @@ class HubProgressFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two HubProgressFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a HubProgressFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a HubProgressFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a HubProgressFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a HubProgressFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1737,6 +2188,21 @@ class OnboardingProgressFlags(BaseFlags):
         .. describe:: x != y
 
             Checks if two OnboardingProgressFlags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns a OnboardingProgressFlags instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns a OnboardingProgressFlags instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns a OnboardingProgressFlags instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns a OnboardingProgressFlags instance with all flags inverted from x.
         .. describe:: hash(x)
 
             Return the flag's hash.
@@ -1767,3 +2233,153 @@ class OnboardingProgressFlags(BaseFlags):
     def notice_cleared(self):
         """:class:`bool`: Returns ``True`` if the user has cleared the onboarding notice."""
         return 1 << 1
+
+
+@fill_with_flags()
+class AutoModPresets(ArrayFlags):
+    r"""Wraps up the Discord :class:`AutoModRule` presets.
+
+    .. container:: operations
+
+        .. describe:: x == y
+
+            Checks if two AutoModPresets flags are equal.
+        .. describe:: x != y
+
+            Checks if two AutoModPresets flags are not equal.
+        .. describe:: x | y, x |= y
+
+            Returns an AutoModPresets instance with all enabled flags from
+            both x and y.
+        .. describe:: x & y, x &= y
+
+            Returns an AutoModPresets instance with only flags enabled on
+            both x and y.
+        .. describe:: x ^ y, x ^= y
+
+            Returns an AutoModPresets instance with only flags enabled on
+            only one of x or y, not on both.
+        .. describe:: ~x
+
+            Returns an AutoModPresets instance with all flags inverted from x.
+        .. describe:: hash(x)
+
+            Return the flag's hash.
+        .. describe:: iter(x)
+
+            Returns an iterator of ``(name, value)`` pairs. This allows it
+            to be, for example, constructed as a dict or a list of pairs.
+
+    .. versionadded:: 2.0
+
+    Attributes
+    -----------
+    value: :class:`int`
+        The raw value. You should query flags via the properties
+        rather than using this raw value.
+    """
+
+    @classmethod
+    def all(cls: Type[Self]) -> Self:
+        """A factory method that creates a :class:`AutoModPresets` with everything enabled."""
+        bits = max(cls.VALID_FLAGS.values()).bit_length()
+        value = (1 << bits) - 1
+        self = cls.__new__(cls)
+        self.value = value
+        return self
+
+    @classmethod
+    def none(cls: Type[Self]) -> Self:
+        """A factory method that creates a :class:`AutoModPresets` with everything disabled."""
+        self = cls.__new__(cls)
+        self.value = self.DEFAULT_VALUE
+        return self
+
+    @flag_value
+    def profanity(self):
+        """:class:`bool`: Whether to use the preset profanity filter."""
+        return 1 << 0
+
+    @flag_value
+    def sexual_content(self):
+        """:class:`bool`: Whether to use the preset sexual content filter."""
+        return 1 << 1
+
+    @flag_value
+    def slurs(self):
+        """:class:`bool`: Whether to use the preset slurs filter."""
+        return 1 << 2
+
+
+@fill_with_flags()
+class MemberFlags(BaseFlags):
+    r"""Wraps up the Discord Guild Member flags
+
+    .. versionadded:: 2.0
+
+    .. container:: operations
+
+        .. describe:: x == y
+
+            Checks if two MemberFlags are equal.
+
+        .. describe:: x != y
+
+            Checks if two MemberFlags are not equal.
+
+        .. describe:: x | y, x |= y
+
+            Returns a MemberFlags instance with all enabled flags from
+            both x and y.
+
+        .. describe:: x & y, x &= y
+
+            Returns a MemberFlags instance with only flags enabled on
+            both x and y.
+
+        .. describe:: x ^ y, x ^= y
+
+            Returns a MemberFlags instance with only flags enabled on
+            only one of x or y, not on both.
+
+        .. describe:: ~x
+
+            Returns a MemberFlags instance with all flags inverted from x.
+
+        .. describe:: hash(x)
+
+            Return the flag's hash.
+
+        .. describe:: iter(x)
+
+            Returns an iterator of ``(name, value)`` pairs. This allows it
+            to be, for example, constructed as a dict or a list of pairs.
+            Note that aliases are not shown.
+
+
+    Attributes
+    -----------
+    value: :class:`int`
+        The raw value. You should query flags via the properties
+        rather than using this raw value.
+    """
+
+    @flag_value
+    def did_rejoin(self):
+        """:class:`bool`: Returns ``True`` if the member left and rejoined the :attr:`~selfcord.Member.guild`."""
+        return 1 << 0
+
+    @flag_value
+    def completed_onboarding(self):
+        """:class:`bool`: Returns ``True`` if the member has completed onboarding."""
+        return 1 << 1
+
+    @flag_value
+    def bypasses_verification(self):
+        """:class:`bool`: Returns ``True`` if the member can bypass the guild verification requirements."""
+        return 1 << 2
+
+    @flag_value
+    def started_onboarding(self):
+        """:class:`bool`: Returns ``True`` if the member has started onboarding."""
+        return 1 << 3

@@ -25,7 +25,7 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 from typing import List, Literal, Optional, TypedDict, Union
-from typing_extensions import NotRequired
+from typing_extensions import NotRequired, Required
 
 from .snowflake import Snowflake, SnowflakeList
 from .member import Member, UserWithMember
@@ -81,12 +81,26 @@ class MessageActivity(TypedDict):
 
 class MessageReference(TypedDict, total=False):
     message_id: Snowflake
-    channel_id: Snowflake
+    channel_id: Required[Snowflake]
     guild_id: Snowflake
     fail_if_not_exists: bool
 
 
-MessageType = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19, 20, 21]
+class Call(TypedDict):
+    participants: List[Snowflake]
+    ended_timestamp: Optional[str]
+
+
+class RoleSubscriptionData(TypedDict):
+    role_subscription_listing_id: Snowflake
+    tier_name: str
+    total_months_subscribed: int
+    is_renewal: bool
+
+
+MessageType = Literal[
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32
+]
 
 
 class Message(PartialMessage):
@@ -117,6 +131,9 @@ class Message(PartialMessage):
     referenced_message: NotRequired[Optional[Message]]
     interaction: NotRequired[MessageInteraction]
     components: NotRequired[List[Component]]
+    position: NotRequired[int]
+    call: NotRequired[Call]
+    role_subscription_data: NotRequired[RoleSubscriptionData]
 
 
 AllowedMentionType = Literal['roles', 'users', 'everyone']

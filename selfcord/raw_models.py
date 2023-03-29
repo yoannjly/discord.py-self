@@ -26,6 +26,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, Set, List, Tuple, Union
 
+from .enums import ChannelType, try_enum
+
 if TYPE_CHECKING:
     from .types.gateway import (
         MessageDeleteEvent,
@@ -36,10 +38,13 @@ if TYPE_CHECKING:
         MessageReactionRemoveEmojiEvent as ReactionClearEmojiEvent,
         MessageUpdateEvent,
         IntegrationDeleteEvent,
+        ThreadDeleteEvent,
+        ThreadMembersUpdate,
     )
     from .message import Message
     from .partial_emoji import PartialEmoji
     from .member import Member
+    from .threads import Thread
 
     ReactionActionEvent = Union[MessageReactionAddEvent, MessageReactionRemoveEvent]
 
@@ -52,6 +57,8 @@ __all__ = (
     'RawReactionClearEvent',
     'RawReactionClearEmojiEvent',
     'RawIntegrationDeleteEvent',
+    'RawThreadDeleteEvent',
+    'RawThreadMembersUpdate',
 )
 
 
@@ -135,7 +142,7 @@ class RawMessageUpdateEvent(_RawReprMixin):
         .. versionadded:: 1.7
 
     data: :class:`dict`
-        The raw data given by the `gateway <https://discord.com/developers/docs/topics/gateway#message-update>`_
+        The raw data given by the :ddocs:`gateway <topics/gateway#message-update>`
     cached_message: Optional[:class:`Message`]
         The cached message, if found in the internal message cache. Represents the message before
         it is modified by the data in :attr:`RawMessageUpdateEvent.data`.
@@ -172,7 +179,7 @@ class RawReactionActionEvent(_RawReprMixin):
     emoji: :class:`PartialEmoji`
         The custom or unicode emoji being used.
     member: Optional[:class:`Member`]
-        The member who added the reaction. Only available if `event_type` is `REACTION_ADD` and the reaction is inside a guild.
+        The member who added the reaction. Only available if ``event_type`` is ``REACTION_ADD`` and the reaction is inside a guild.
 
         .. versionadded:: 1.3
 
@@ -280,3 +287,58 @@ class RawIntegrationDeleteEvent(_RawReprMixin):
             self.application_id: Optional[int] = int(data['application_id'])
         except KeyError:
             self.application_id: Optional[int] = None
+
+
+class RawThreadDeleteEvent(_RawReprMixin):
+    """Represents the payload for a :func:`on_raw_thread_delete` event.
+
+    .. versionadded:: 2.0
+
+    Attributes
+    ----------
+    thread_id: :class:`int`
+        The ID of the thread that was deleted.
+    thread_type: :class:`selfcord.ChannelType`
+        The channel type of the deleted thread.
+    guild_id: :class:`int`
+        The ID of the guild the thread was deleted in.
+    parent_id: :class:`int`
+        The ID of the channel the thread belonged to.
+    thread: Optional[:class:`selfcord.Thread`]
+        The thread, if it could be found in the internal cache.
+    """
+
+    __slots__ = ('thread_id', 'thread_type', 'parent_id', 'guild_id', 'thread')
+
+    def __init__(self, data: ThreadDeleteEvent) -> None:
+        self.thread_id: int = int(data['id'])
+        self.thread_type: ChannelType = try_enum(ChannelType, data['type'])
+        self.guild_id: int = int(data['guild_id'])
+        self.parent_id: int = int(data['parent_id'])
+        self.thread: Optional[Thread] = None
+
+
+class RawThreadMembersUpdate(_RawReprMixin):
+    """Represents the payload for a :func:`on_raw_thread_member_remove` event.
+
+    .. versionadded:: 2.0
+
+    Attributes
+    ----------
+    thread_id: :class:`int`
+        The ID of the thread that was updated.
+    guild_id: :class:`int`
+        The ID of the guild the thread is in.
+    member_count: :class:`int`
+        The approximate number of members in the thread. This caps at 50.
+    data: :class:`dict`
+        The raw data given by the :ddocs:`gateway <topics/gateway#thread-members-update>`.
+    """
+
+    __slots__ = ('thread_id', 'guild_id', 'member_count', 'data')
+
+    def __init__(self, data: ThreadMembersUpdate) -> None:
+        self.thread_id: int = int(data['id'])
+        self.guild_id: int = int(data['guild_id'])
+        self.member_count: int = int(data['member_count'])
+        self.data: ThreadMembersUpdate = data
