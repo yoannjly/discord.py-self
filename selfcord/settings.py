@@ -31,7 +31,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Collection, Dict, List, Literal, Optional, Sequence, Tuple, Type, Union, overload
 
 from google.protobuf.json_format import MessageToDict, ParseDict
-from selfcord_protos import PreloadedUserSettings  # , FrecencyUserSettings
+from discord_protos import PreloadedUserSettings  # , FrecencyUserSettings
 
 from .activity import CustomActivity
 from .colour import Colour

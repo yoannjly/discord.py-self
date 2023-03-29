@@ -49,7 +49,7 @@ import weakref
 import inspect
 from math import ceil
 
-from selfcord_protos import UserSettingsType
+from discord_protos import UserSettingsType
 
 from .errors import ClientException, InvalidData, NotFound
 from .guild import CommandCounts, Guild
