@@ -52,7 +52,7 @@ from math import ceil
 from discord_protos import UserSettingsType
 
 from .errors import ClientException, InvalidData, NotFound
-from .guild import CommandCounts, Guild
+from .guild import ApplicationCommandCounts, Guild
 from .activity import BaseActivity, create_activity, Session
 from .user import User, ClientUser
 from .emoji import Emoji
@@ -755,12 +755,16 @@ class ConnectionState:
     def store_emoji(self, guild: Guild, data: EmojiPayload) -> Emoji:
         # The id will be present here
         emoji_id = int(data['id'])  # type: ignore
-        self._emojis[emoji_id] = emoji = Emoji(guild=guild, state=self, data=data)
+        emoji = Emoji(guild=guild, state=self, data=data)
+        if not self.is_guild_evicted(guild):
+            self._emojis[emoji_id] = emoji
         return emoji
 
     def store_sticker(self, guild: Guild, data: GuildStickerPayload) -> GuildSticker:
         sticker_id = int(data['id'])
-        self._stickers[sticker_id] = sticker = GuildSticker(state=self, data=data)
+        sticker = GuildSticker(state=self, data=data)
+        if not self.is_guild_evicted(guild):
+            self._stickers[sticker_id] = sticker
         return sticker
 
     @property
@@ -936,7 +940,7 @@ class ConnectionState:
                 try:
                     await asyncio.wait_for(future, timeout=10)
                 except asyncio.TimeoutError:
-                    _log.warning('Timed out waiting for chunks for guild_id %s.', guild.id)
+                    _log.warning('Timed out waiting for member list subscriptions for guild_id %s.', guild.id)
                 except (ClientException, InvalidData):
                     pass
         except asyncio.CancelledError:
@@ -1982,7 +1986,7 @@ class ConnectionState:
             )
             return
 
-        guild.command_counts = CommandCounts(data.get(0, 0), data.get(1, 0), data.get(2, 0))
+        guild.application_command_counts = ApplicationCommandCounts(data.get(0, 0), data.get(1, 0), data.get(2, 0))
 
     parse_guild_application_command_index_update = parse_guild_application_command_counts_update
 
