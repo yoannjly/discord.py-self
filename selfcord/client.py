@@ -51,7 +51,7 @@ from .user import _UserTag, User, ClientUser, Note
 from .invite import Invite
 from .template import Template
 from .widget import Widget
-from .guild import Guild, UserGuild
+from .guild import Guild
 from .emoji import Emoji
 from .channel import _private_channel_factory, _threaded_channel_factory, GroupChannel, PartialMessageable
 from .enums import ActivityType, ChannelType, ClientType, ConnectionType, EntitlementType, Status
@@ -1597,10 +1597,15 @@ class Client:
 
     # Guild stuff
 
-    async def fetch_guilds(self, *, with_counts: bool = True) -> List[UserGuild]:
+    async def fetch_guilds(self, *, with_counts: bool = True) -> List[Guild]:
         """|coro|
 
-        Retrieves all your guilds.
+        Retrieves all your your guilds.
+
+        .. note::
+
+            Using this, you will only receive :attr:`.Guild.owner`, :attr:`.Guild.icon`,
+            :attr:`.Guild.id`, and :attr:`.Guild.name` per :class:`.Guild`.
 
         .. note::
 
@@ -1618,12 +1623,15 @@ class Client:
 
         Returns
         --------
-        List[:class:`.UserGuild`]
+        List[:class:`.Guild`]
             A list of all your guilds.
         """
         state = self._connection
         guilds = await state.http.get_guilds(with_counts)
-        return [UserGuild(data=data, state=state) for data in guilds]
+        guilds = [Guild(data=data, state=state) for data in guilds]
+        for guild in guilds:
+            guild._cs_joined = True
+        return guilds
 
     async def fetch_template(self, code: Union[Template, str]) -> Template:
         """|coro|
@@ -1656,6 +1664,10 @@ class Client:
 
         Retrieves a :class:`.Guild` from an ID.
 
+        .. versionchanged:: 2.0
+
+            ``guild_id`` parameter is now positional-only.
+
         .. note::
 
             Using this, you will **not** receive :attr:`.Guild.channels` and :attr:`.Guild.members`.
@@ -1673,7 +1685,7 @@ class Client:
         guild_id: :class:`int`
             The guild's ID to fetch from.
         with_counts: :class:`bool`
-            Whether to include count information in the guild. This fills in
+            Whether to include count information in the guild. This fills the
             :attr:`.Guild.approximate_member_count` and :attr:`.Guild.approximate_presence_count`.
 
             .. versionadded:: 2.0

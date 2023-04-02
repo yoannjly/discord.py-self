@@ -57,14 +57,7 @@ NSFWLevel = Literal[0, 1, 2, 3]
 PremiumTier = Literal[0, 1, 2, 3]
 
 
-class BaseGuild(TypedDict):
-    id: Snowflake
-    name: str
-    icon: Optional[str]
-    features: List[str]
-
-
-class PartialGuild(BaseGuild):
+class PartialGuild(UnavailableGuild):
     name: str
     icon: Optional[str]
     splash: Optional[str]
@@ -84,7 +77,7 @@ class GuildPreview(PartialGuild, _GuildPreviewUnique):
     ...
 
 
-class Guild(UnavailableGuild, PartialGuild):
+class Guild(PartialGuild):
     owner_id: Snowflake
     region: str
     afk_channel_id: Optional[Snowflake]
@@ -124,13 +117,6 @@ class Guild(UnavailableGuild, PartialGuild):
     max_members: NotRequired[int]
     premium_subscription_count: NotRequired[int]
     max_video_channel_users: NotRequired[int]
-
-
-class UserGuild(BaseGuild):
-    owner: bool
-    permissions: str
-    approximate_member_count: NotRequired[int]
-    approximate_presence_count: NotRequired[int]
 
 
 class InviteGuild(Guild, total=False):
