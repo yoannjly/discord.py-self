@@ -889,7 +889,13 @@ class User(BaseUser, selfcord.abc.Connectable, selfcord.abc.Messageable):
 
         original = (self.name, self._avatar, self.discriminator, self._public_flags, self._avatar_decoration)
         # These keys seem to always be available
-        modified = (user['username'], user.get('avatar'), user['discriminator'], user.get('public_flags', 0), user.get('avatar_decoration'))
+        modified = (
+            user['username'],
+            user.get('avatar'),
+            user['discriminator'],
+            user.get('public_flags', 0),
+            user.get('avatar_decoration'),
+        )
         if original != modified:
             to_return = User._copy(self)
             self.name, self._avatar, self.discriminator, self._public_flags, self._avatar_decoration = modified
