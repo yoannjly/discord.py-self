@@ -33,8 +33,6 @@ from typing import (
     Generic,
     List,
     Optional,
-    overload,
-    Sequence,
     TypeVar,
     Union,
 )
@@ -51,12 +49,9 @@ if TYPE_CHECKING:
 
     from selfcord.abc import MessageableChannel
     from selfcord.commands import MessageCommand
-    from selfcord.file import _FileBase
     from selfcord.guild import Guild
     from selfcord.member import Member
-    from selfcord.mentions import AllowedMentions
     from selfcord.state import ConnectionState
-    from selfcord.sticker import GuildSticker, StickerItem
     from selfcord.user import ClientUser, User
     from selfcord.voice_client import VoiceProtocol
 
@@ -426,82 +421,6 @@ class Context(selfcord.abc.Messageable, Generic[BotT]):
                 return None
         except CommandError as e:
             await cmd.on_help_command_error(self, e)
-
-    @overload
-    async def reply(
-        self,
-        content: Optional[str] = ...,
-        *,
-        tts: bool = ...,
-        file: _FileBase = ...,
-        stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
-        delete_after: float = ...,
-        nonce: Union[str, int] = ...,
-        allowed_mentions: AllowedMentions = ...,
-        mention_author: bool = ...,
-        suppress_embeds: bool = ...,
-        ephemeral: bool = ...,
-        silent: bool = ...,
-    ) -> Message:
-        ...
-
-    @overload
-    async def reply(
-        self,
-        content: Optional[str] = ...,
-        *,
-        tts: bool = ...,
-        files: Sequence[_FileBase] = ...,
-        stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
-        delete_after: float = ...,
-        nonce: Union[str, int] = ...,
-        allowed_mentions: AllowedMentions = ...,
-        mention_author: bool = ...,
-        suppress_embeds: bool = ...,
-        ephemeral: bool = ...,
-        silent: bool = ...,
-    ) -> Message:
-        ...
-
-    @overload
-    async def reply(
-        self,
-        content: Optional[str] = ...,
-        *,
-        tts: bool = ...,
-        file: _FileBase = ...,
-        stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
-        delete_after: float = ...,
-        nonce: Union[str, int] = ...,
-        allowed_mentions: AllowedMentions = ...,
-        mention_author: bool = ...,
-        suppress_embeds: bool = ...,
-        ephemeral: bool = ...,
-        silent: bool = ...,
-    ) -> Message:
-        ...
-
-    @overload
-    async def reply(
-        self,
-        content: Optional[str] = ...,
-        *,
-        tts: bool = ...,
-        files: Sequence[_FileBase] = ...,
-        stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
-        delete_after: float = ...,
-        nonce: Union[str, int] = ...,
-        allowed_mentions: AllowedMentions = ...,
-        mention_author: bool = ...,
-        suppress_embeds: bool = ...,
-        ephemeral: bool = ...,
-        silent: bool = ...,
-    ) -> Message:
-        ...
-
-    @selfcord.utils.copy_doc(Message.reply)
-    async def reply(self, content: Optional[str] = None, **kwargs: Any) -> Message:
-        return await self.message.reply(content, **kwargs)
 
     @selfcord.utils.copy_doc(Message.message_commands)
     def message_commands(
