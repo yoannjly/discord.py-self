@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 
     from selfcord.abc import MessageableChannel
     from selfcord.commands import MessageCommand
-    from selfcord.file import File
+    from selfcord.file import _FileBase
     from selfcord.guild import Guild
     from selfcord.member import Member
     from selfcord.mentions import AllowedMentions
@@ -433,7 +433,7 @@ class Context(selfcord.abc.Messageable, Generic[BotT]):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        file: File = ...,
+        file: _FileBase = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -451,7 +451,7 @@ class Context(selfcord.abc.Messageable, Generic[BotT]):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        files: Sequence[File] = ...,
+        files: Sequence[_FileBase] = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -469,7 +469,7 @@ class Context(selfcord.abc.Messageable, Generic[BotT]):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        file: File = ...,
+        file: _FileBase = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
@@ -487,7 +487,7 @@ class Context(selfcord.abc.Messageable, Generic[BotT]):
         content: Optional[str] = ...,
         *,
         tts: bool = ...,
-        files: Sequence[File] = ...,
+        files: Sequence[_FileBase] = ...,
         stickers: Sequence[Union[GuildSticker, StickerItem]] = ...,
         delete_after: float = ...,
         nonce: Union[str, int] = ...,
