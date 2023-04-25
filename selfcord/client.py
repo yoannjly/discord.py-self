@@ -506,7 +506,7 @@ class Client:
 
     @property
     def friend_suggestion_count(self) -> int:
-        """int: The number of friend suggestions that the connected client has.
+        """:class:`int`: The number of friend suggestions that the connected client has.
 
         .. versionadded:: 2.1
         """
