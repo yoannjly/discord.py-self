@@ -263,7 +263,7 @@ class SlashMixin(ApplicationCommand, Protocol):
             type = option.type
 
             if type in {
-                ApplicationCommandOptionTypetionTypetionTypetionType.user,
+                ApplicationCommandOptionType.user,
                 ApplicationCommandOptionType.channel,
                 ApplicationCommandOptionType.role,
                 ApplicationCommandOptionType.mentionable,
@@ -871,7 +871,7 @@ class Option:
     required: :class:`bool`
         Whether the option is required.
     min_value: Optional[Union[:class:`int`, :class:`float`]]
-        Minimum value of the option. Only applicable to :attr:`ApplicationCommandOptionTypetionType.integer` and :attr:`ApplicationCommandOptionType.number`.
+        Minimum value of the option. Only applicable to :attr:`ApplicationCommandOptionType.integer` and :attr:`ApplicationCommandOptionType.number`.
     max_value: Optional[Union[:class:`int`, :class:`float`]]
         Maximum value of the option. Only applicable to :attr:`ApplicationCommandOptionType.integer` and :attr:`ApplicationCommandOptionType.number`.
     choices: List[:class:`OptionChoice`]
