@@ -31,6 +31,7 @@ import ssl
 import string
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Coroutine,
     Dict,
@@ -573,6 +574,7 @@ class HTTPClient:
         http_trace: Optional[aiohttp.TraceConfig] = None,
         captcha_handler: Optional[CaptchaHandler] = None,
         max_ratelimit_timeout: Optional[float] = None,
+        locale: Callable[[], str] = lambda: 'en-US',
     ) -> None:
         self.loop: asyncio.AbstractEventLoop = loop
         self.connector: aiohttp.BaseConnector = connector or MISSING
@@ -595,6 +597,7 @@ class HTTPClient:
         self.use_clock: bool = not unsync_clock
         self.captcha_handler: Optional[CaptchaHandler] = captcha_handler
         self.max_ratelimit_timeout: Optional[float] = max(30.0, max_ratelimit_timeout) if max_ratelimit_timeout else None
+        self.get_locale: Callable[[], str] = locale
 
         self.super_properties: Dict[str, Any] = {}
         self.encoded_super_properties: str = MISSING
@@ -713,7 +716,7 @@ class HTTPClient:
             'Origin': 'https://discord.com',
             'Pragma': 'no-cache',
             'Referer': 'https://discord.com/channels/@me',
-            'Sec-CH-UA': '"Google Chrome";v="{0}", "Chromium";v="{0}", ";Not A Brand";v="99"'.format(
+            'Sec-CH-UA': '"Google Chrome";v="{0}", "Chromium";v="{0}", ";Not-A.Brand";v="24"'.format(
                 self.browser_version.split('.')[0]
             ),
             'Sec-CH-UA-Mobile': '?0',
@@ -722,7 +725,7 @@ class HTTPClient:
             'Sec-Fetch-Mode': 'cors',
             'Sec-Fetch-Site': 'same-origin',
             'User-Agent': self.user_agent,
-            'X-Discord-Locale': 'en-US',
+            'X-Discord-Locale': self.get_locale(),
             'X-Debug-Options': 'bugReporterEnabled',
             'X-Super-Properties': self.encoded_super_properties,
         }
@@ -4487,7 +4490,7 @@ class HTTPClient:
         *,
         nonce: Optional[str] = MISSING,
         application_id: Snowflake = MISSING,
-        files: Optional[List[File]] = None,
+        files: Optional[List[_FileBase]] = None,
     ) -> Response[None]:
         state = getattr(message, '_state', channel._state)
         payload = {
@@ -4509,9 +4512,12 @@ class HTTPClient:
                 payload['guild_id'] = str(guild.id)
 
         form = []
+        to_upload = [file for file in files if isinstance(file, File)] if files else []
         if files is not None:
             form.append({'name': 'payload_json', 'value': utils._to_json(payload)})
-            for index, file in enumerate(files or []):
+
+            # Legacy uploading
+            for index, file in enumerate(to_upload or []):
                 form.append(
                     {
                         'name': f'files[{index}]',
@@ -4522,7 +4528,7 @@ class HTTPClient:
                 )
             payload = None
 
-        return self.request(Route('POST', '/interactions'), json=payload, form=form, files=files)
+        return self.request(Route('POST', '/interactions'), json=payload, form=form, files=to_upload)
 
     def get_user_affinities(self) -> Response[user.UserAffinities]:
         return self.request(Route('GET', '/users/@me/affinities/users'))
