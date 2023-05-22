@@ -358,6 +358,14 @@ class TextChannel(selfcord.abc.Messageable, selfcord.abc.GuildChannel, Hashable)
         """
         return self.read_state.badge_count
 
+    @property
+    def last_viewed_timestamp(self) -> datetime.date:
+        """:class:`datetime.date`: When the channel was last viewed.
+
+        .. versionadded:: 2.1
+        """
+        return self.read_state.last_viewed  # type: ignore
+
     @overload
     async def edit(self) -> Optional[TextChannel]:
         ...
@@ -1137,6 +1145,14 @@ class VocalGuildChannel(selfcord.abc.Messageable, selfcord.abc.Connectable, self
         .. versionadded:: 2.1
         """
         return self.read_state.badge_count
+
+    @property
+    def last_viewed_timestamp(self) -> datetime.date:
+        """:class:`datetime.date`: When the channel was last viewed.
+
+        .. versionadded:: 2.1
+        """
+        return self.read_state.last_viewed  # type: ignore
 
     def get_partial_message(self, message_id: int, /) -> PartialMessage:
         """Creates a :class:`PartialMessage` from the message ID.
@@ -3201,6 +3217,14 @@ class DMChannel(selfcord.abc.Messageable, selfcord.abc.Connectable, selfcord.abc
         return self.read_state.badge_count
 
     @property
+    def last_viewed_timestamp(self) -> datetime.date:
+        """:class:`datetime.date`: When the channel was last viewed.
+
+        .. versionadded:: 2.1
+        """
+        return self.read_state.last_viewed  # type: ignore
+
+    @property
     def requested_at(self) -> Optional[datetime.datetime]:
         """Optional[:class:`datetime.datetime`]: Returns the message request's creation time in UTC, if applicable.
 
@@ -3662,6 +3686,14 @@ class GroupChannel(selfcord.abc.Messageable, selfcord.abc.Connectable, selfcord.
         """
         return self.read_state.badge_count
 
+    @property
+    def last_viewed_timestamp(self) -> datetime.date:
+        """:class:`datetime.date`: When the channel was last viewed.
+
+        .. versionadded:: 2.1
+        """
+        return self.read_state.last_viewed  # type: ignore
+
     def permissions_for(self, obj: Snowflake, /) -> Permissions:
         """Handles permission resolution for a :class:`User`.
 
@@ -4009,6 +4041,14 @@ class PartialMessageable(selfcord.abc.Messageable, Hashable):
     def created_at(self) -> datetime.datetime:
         """:class:`datetime.datetime`: Returns the channel's creation time in UTC."""
         return utils.snowflake_time(self.id)
+
+    @property
+    def read_state(self) -> ReadState:
+        """:class:`ReadState`: Returns the read state for this channel.
+
+        .. versionadded:: 2.1
+        """
+        return self._state.get_read_state(self.id)
 
     def permissions_for(self, obj: Any = None, /) -> Permissions:
         """Handles permission resolution for a :class:`User`.
