@@ -571,6 +571,14 @@ class Client:
             exp.name = name
         return exp
 
+    @property
+    def disclose(self) -> Sequence[str]:
+        """Sequence[:class:`str`]: Upcoming changes to the user's account.
+
+        .. versionadded:: 2.1
+        """
+        return utils.SequenceProxy(self._connection.disclose)
+
     def is_ready(self) -> bool:
         """:class:`bool`: Specifies if the client's internal cache is ready for use."""
         return self._ready is not MISSING and self._ready.is_set()
@@ -2966,10 +2974,13 @@ class Client:
             # Passing a user object:
             await client.send_friend_request(user)
 
-            # Passing a stringified user:
+            # Passing a username
+            await client.send_friend_request('jake')
+
+            # Passing a legacy user:
             await client.send_friend_request('Jake#0001')
 
-            # Passing a username and discriminator:
+            # Passing a legacy username and discriminator:
             await client.send_friend_request('Jake', '0001')
 
         Parameters
@@ -2996,14 +3007,14 @@ class Client:
             user = args[0]
             if isinstance(user, _UserTag):
                 user = str(user)
-            username, discrim = user.split('#')
+            username, _, discrim = user.partition('#')
         elif len(args) == 2:
             username, discrim = args  # type: ignore
         else:
             raise TypeError(f'send_friend_request() takes 1 or 2 arguments but {len(args)} were given')
 
         state = self._connection
-        await state.http.send_friend_request(username, discrim)
+        await state.http.send_friend_request(username, discrim or 0)
 
     async def applications(self, *, with_team_applications: bool = True) -> List[Application]:
         """|coro|
@@ -5051,3 +5062,58 @@ class Client:
             experiments.append(GuildExperiment(state=state, data=exp))
 
         return experiments
+
+    async def pomelo_suggestion(self) -> str:
+        """|coro|
+
+        Gets the suggested pomelo username for your account.
+        This username can be used with :meth:`edit` to migrate your account
+        to Discord's `new unique username system <https://discord.com/blog/usernames>`_
+
+        .. note::
+
+            This method requires you to be in the pomelo rollout.
+
+        .. versionadded:: 2.1
+
+        Raises
+        -------
+        HTTPException
+            You are not in the pomelo rollout.
+
+        Returns
+        --------
+        :class:`str`
+            The suggested username.
+        """
+        data = await self.http.pomelo_suggestion()
+        return data['username']
+
+    async def check_pomelo_username(self, username: str) -> bool:
+        """|coro|
+
+        Checks if a pomelo username is taken.
+
+        .. note::
+
+            This method requires you to be in the pomelo rollout.
+
+        .. versionadded:: 2.1
+
+        Parameters
+        -----------
+        username: :class:`str`
+            The username to check.
+
+        Raises
+        -------
+        HTTPException
+            You are not in the pomelo rollout.
+
+        Returns
+        --------
+        :class:`bool`
+            Whether the username is taken.
+        """
+        data = await self.http.pomelo_attempt(username)
+        return data['taken']
