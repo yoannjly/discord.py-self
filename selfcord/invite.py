@@ -668,7 +668,9 @@ class Invite(Hashable):
                 'channel_id': getattr(self.channel, 'id', MISSING),
                 'channel_type': getattr(self.channel, 'type', MISSING),
             }
-        data = await state.http.accept_invite(self.code, type, state.session_id or _generate_session_id(), message=self._message, **kwargs)
+        data = await state.http.accept_invite(
+            self.code, type, state.session_id or _generate_session_id(), message=self._message, **kwargs
+        )
         return Invite.from_incomplete(state=state, data=data, message=self._message)
 
     async def accept(self) -> Invite:
