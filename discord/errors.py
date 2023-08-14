@@ -29,9 +29,10 @@ from .utils import _get_as_snowflake
 
 if TYPE_CHECKING:
     from aiohttp import ClientResponse, ClientWebSocketResponse
+    from curl_cffi.requests import Response as CurlResponse
     from requests import Response
 
-    _ResponseType = Union[ClientResponse, Response]
+    _ResponseType = Union[ClientResponse, CurlResponse, Response]
 
 __all__ = (
     'DiscordException',
