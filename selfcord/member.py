@@ -1108,20 +1108,6 @@ class Member(selfcord.abc.Messageable, selfcord.abc.Connectable, _UserTag):
             return utils.utcnow() < self.timed_out_until
         return False
 
-    async def send_friend_request(self) -> None:
-        """|coro|
-
-        Sends the member a friend request.
-
-        Raises
-        -------
-        Forbidden
-            Not allowed to send a friend request to the member.
-        HTTPException
-            Sending the friend request failed.
-        """
-        await self._state.http.add_relationship(self._user.id, action=RelationshipAction.send_friend_request)
-
     async def profile(
         self,
         *,
