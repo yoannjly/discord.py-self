@@ -37,7 +37,7 @@ from .asset import Asset
 from .utils import MISSING
 from .user import BaseUser, User, _UserTag
 from .permissions import Permissions
-from .enums import RelationshipAction, Status, try_enum
+from .enums import Status, try_enum
 from .errors import ClientException
 from .colour import Colour
 from .object import Object
