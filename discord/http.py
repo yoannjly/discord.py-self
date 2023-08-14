@@ -25,11 +25,16 @@ DEALINGS IN THE SOFTWARE.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
-from random import choice, choices
+import platform
 import ssl
 import string
+import sys
+from collections import deque
+from random import choice, choices
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
@@ -41,48 +46,50 @@ from typing import (
     Mapping,
     NamedTuple,
     Optional,
-    overload,
     Sequence,
-    TYPE_CHECKING,
     Type,
     TypeVar,
     Union,
+    overload,
 )
 from urllib.parse import quote as _uriquote
-from collections import deque
-import datetime
+
+if platform.system() == 'Windows' and sys.version_info >= (3, 8):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # type: ignore
 
 import aiohttp
+from curl_cffi import requests
 
-from .enums import RelationshipAction, InviteType
-from .errors import (
-    HTTPException,
-    RateLimited,
-    Forbidden,
-    NotFound,
-    LoginFailure,
-    DiscordServerError,
-    GatewayNotFound,
-    CaptchaRequired,
-)
-from .file import _FileBase, File
-from .tracking import ContextProperties
 from . import utils
+from .enums import InviteType, RelationshipAction
+from .errors import (
+    CaptchaRequired,
+    DiscordServerError,
+    Forbidden,
+    GatewayNotFound,
+    HTTPException,
+    LoginFailure,
+    NotFound,
+    RateLimited,
+)
+from .file import File, _FileBase
 from .mentions import AllowedMentions
+from .tracking import ContextProperties
 from .utils import MISSING
 
 if TYPE_CHECKING:
+    from types import TracebackType
+
     from typing_extensions import Self
 
-    from .channel import TextChannel, DMChannel, GroupChannel, PartialMessageable, VoiceChannel, ForumChannel
+    from .channel import DMChannel, ForumChannel, GroupChannel, PartialMessageable, TextChannel, VoiceChannel
+    from .embeds import Embed
+    from .enums import ChannelType, InteractionType
+    from .flags import MessageFlags
     from .handlers import CaptchaHandler
-    from .threads import Thread
     from .mentions import AllowedMentions
     from .message import Attachment, Message
-    from .flags import MessageFlags
-    from .enums import ChannelType, InteractionType
-    from .embeds import Embed
-
+    from .threads import Thread
     from .types import (
         application,
         audit_log,
@@ -103,22 +110,20 @@ if TYPE_CHECKING:
         profile,
         promotions,
         read_state,
-        template,
         role,
-        user,
-        webhook,
-        widget,
-        team,
-        threads,
         scheduled_event,
+        sticker,
         store,
         subscriptions,
-        sticker,
+        team,
+        template,
+        threads,
+        user,
+        webhook,
         welcome_screen,
+        widget,
     )
     from .types.snowflake import Snowflake, SnowflakeList
-
-    from types import TracebackType
 
     T = TypeVar('T')
     BE = TypeVar('BE', bound=BaseException)
@@ -148,8 +153,12 @@ CIPHERS = (
 _log = logging.getLogger(__name__)
 
 
-async def json_or_text(response: aiohttp.ClientResponse) -> Union[Dict[str, Any], str]:
-    text = await response.text(encoding='utf-8')
+async def json_or_text(response: aiohttp.ClientResponse | requests.Response) -> Union[Dict[str, Any], str]:
+    if isinstance(response, aiohttp.ClientResponse):
+        text = await response.text(encoding='utf-8')
+    else:
+        text = response.content.decode('utf-8')
+
     try:
         if response.headers['content-type'] == 'application/json':
             return utils._from_json(text)
@@ -439,7 +448,7 @@ class Ratelimit:
         self.reset_after = 0.0
         self.dirty = False
 
-    def update(self, response: aiohttp.ClientResponse, *, use_clock: bool = False) -> None:
+    def update(self, response: aiohttp.ClientResponse | requests.Response, *, use_clock: bool = False) -> None:
         headers = response.headers
         self.limit = int(headers.get('X-Ratelimit-Limit', 1))
 
@@ -579,7 +588,8 @@ class HTTPClient:
     ) -> None:
         self.loop: asyncio.AbstractEventLoop = loop
         self.connector: aiohttp.BaseConnector = connector or MISSING
-        self.__session: aiohttp.ClientSession = MISSING
+        self.__asession: aiohttp.ClientSession = MISSING
+        self.__session: requests.AsyncSession = MISSING
         # Route key -> Bucket hash
         self._bucket_hashes: Dict[str, str] = {}
         # Bucket Hash + Major Parameters -> Rate limit
@@ -605,16 +615,16 @@ class HTTPClient:
         self._started: bool = False
 
     def __del__(self) -> None:
-        session = self.__session
-        if session:
+        asession = self.__asession
+        if asession:
             try:
-                session.connector._close()  # type: ignore # Handled below
+                asession.connector._close()  # type: ignore # Handled below
             except AttributeError:
                 pass
 
     def clear(self) -> None:
-        if self.__session and self.__session.closed:
-            self.__session = MISSING
+        if self.__asession and self.__asession.closed:
+            self.__asession = MISSING
 
     async def startup(self) -> None:
         if self._started:
@@ -625,13 +635,18 @@ class HTTPClient:
 
         if self.connector is MISSING or self.connector.closed:
             self.connector = aiohttp.TCPConnector(limit=0)
-        self.__session = session = await _gen_session(
+        self.__asession = session = await _gen_session(
             aiohttp.ClientSession(
                 connector=self.connector, trace_configs=None if self.http_trace is None else [self.http_trace]
             )
         )
         self.super_properties, self.encoded_super_properties = sp, _ = await utils._get_info(session)
         _log.info('Found user agent %s, build number %s.', sp.get('browser_user_agent'), sp.get('client_build_number'))
+
+        impersonate = f'chrome{sp.get("browser_user_agent", "110")[:3]}'
+        if not requests.BrowserType.has(impersonate):
+            impersonate = 'chrome110'
+        self.__session = requests.AsyncSession(impersonate=impersonate)
 
         if self.captcha_handler is not None:
             await self.captcha_handler.startup()
@@ -657,7 +672,7 @@ class HTTPClient:
             'compress': compress,
         }
 
-        return await self.__session.ws_connect(url, **kwargs)
+        return await self.__asession.ws_connect(url, **kwargs)
 
     @property
     def browser_version(self) -> str:
@@ -767,14 +782,14 @@ class HTTPClient:
 
         # Proxy support
         if self.proxy is not None:
-            kwargs['proxy'] = self.proxy
-        if self.proxy_auth is not None:
-            kwargs['proxy_auth'] = self.proxy_auth
+            kwargs['proxies'] = {'http': self.proxy, 'https': self.proxy}
+        # if self.proxy_auth is not None:
+        #     kwargs['proxy_auth'] = self.proxy_auth
 
         if not self._global_over.is_set():
             await self._global_over.wait()
 
-        response: Optional[aiohttp.ClientResponse] = None
+        response: Optional[requests.Response] = None
         data: Optional[Union[Dict[str, Any], str]] = None
         failed = 0  # Number of 500'd requests
         async with ratelimit:
@@ -788,141 +803,142 @@ class HTTPClient:
                     form_data = aiohttp.FormData(quote_fields=False)
                     for params in form:
                         form_data.add_field(**params)
-                    kwargs['data'] = form_data
+                    kwargs['data'] = form_data()
 
                 if failed:
                     headers['X-Failed-Requests'] = str(failed)
 
                 try:
-                    async with self.__session.request(method, url, **kwargs) as response:
-                        _log.debug('%s %s with %s has returned %s.', method, url, kwargs.get('data'), response.status)
-                        data = await json_or_text(response)
+                    response = await self.__session.request(method, url, **kwargs)
+                    response.status: int = response.status_code  # type: ignore
+                    _log.debug('%s %s with %s has returned %s.', method, url, kwargs.get('data'), response.status_code)
+                    data = await json_or_text(response)
 
-                        # Update and use rate limit information if the bucket header is present
-                        discord_hash = response.headers.get('X-Ratelimit-Bucket')
-                        # I am unsure if X-Ratelimit-Bucket is always available
-                        # However, X-Ratelimit-Remaining has been a consistent cornerstone that worked
-                        has_ratelimit_headers = 'X-Ratelimit-Remaining' in response.headers
-                        if discord_hash is not None:
-                            # If the hash Discord has provided is somehow different from our current hash something changed
-                            if bucket_hash != discord_hash:
-                                if bucket_hash is not None:
-                                    # If the previous hash was an actual Discord hash then this means the
-                                    # hash has changed sporadically.
-                                    # This can be due to two reasons
-                                    # 1. It's a sub-ratelimit which is hard to handle
-                                    # 2. The rate limit information genuinely changed
-                                    # There is no good way to discern these, Discord doesn't provide a way to do so.
-                                    # At best, there will be some form of logging to help catch it.
-                                    # Alternating sub-ratelimits means that the requests oscillate between
-                                    # different underlying rate limits -- this can lead to unexpected 429s
-                                    # It is unavoidable.
-                                    fmt = 'A route (%s) has changed hashes: %s -> %s.'
-                                    _log.debug(fmt, route_key, bucket_hash, discord_hash)
+                    # Update and use rate limit information if the bucket header is present
+                    discord_hash = response.headers.get('X-Ratelimit-Bucket')
+                    # I am unsure if X-Ratelimit-Bucket is always available
+                    # However, X-Ratelimit-Remaining has been a consistent cornerstone that worked
+                    has_ratelimit_headers = 'X-Ratelimit-Remaining' in response.headers
+                    if discord_hash is not None:
+                        # If the hash Discord has provided is somehow different from our current hash something changed
+                        if bucket_hash != discord_hash:
+                            if bucket_hash is not None:
+                                # If the previous hash was an actual Discord hash then this means the
+                                # hash has changed sporadically.
+                                # This can be due to two reasons
+                                # 1. It's a sub-ratelimit which is hard to handle
+                                # 2. The rate limit information genuinely changed
+                                # There is no good way to discern these, Discord doesn't provide a way to do so.
+                                # At best, there will be some form of logging to help catch it.
+                                # Alternating sub-ratelimits means that the requests oscillate between
+                                # different underlying rate limits -- this can lead to unexpected 429s
+                                # It is unavoidable.
+                                fmt = 'A route (%s) has changed hashes: %s -> %s.'
+                                _log.debug(fmt, route_key, bucket_hash, discord_hash)
 
-                                    self._bucket_hashes[route_key] = discord_hash
-                                    recalculated_key = discord_hash + route.major_parameters
-                                    self._buckets[recalculated_key] = ratelimit
-                                    self._buckets.pop(key, None)
-                                elif route_key not in self._bucket_hashes:
-                                    fmt = '%s has found its initial rate limit bucket hash (%s).'
-                                    _log.debug(fmt, route_key, discord_hash)
-                                    self._bucket_hashes[route_key] = discord_hash
-                                    self._buckets[discord_hash + route.major_parameters] = ratelimit
+                                self._bucket_hashes[route_key] = discord_hash
+                                recalculated_key = discord_hash + route.major_parameters
+                                self._buckets[recalculated_key] = ratelimit
+                                self._buckets.pop(key, None)
+                            elif route_key not in self._bucket_hashes:
+                                fmt = '%s has found its initial rate limit bucket hash (%s).'
+                                _log.debug(fmt, route_key, discord_hash)
+                                self._bucket_hashes[route_key] = discord_hash
+                                self._buckets[discord_hash + route.major_parameters] = ratelimit
 
-                        if has_ratelimit_headers:
-                            if response.status != 429:
-                                ratelimit.update(response, use_clock=self.use_clock)
-                                if ratelimit.remaining == 0:
-                                    _log.debug(
-                                        'A rate limit bucket (%s) has been exhausted. Pre-emptively rate limiting...',
-                                        discord_hash or route_key,
-                                    )
-
-                        # 202s must be retried
-                        if response.status == 202 and isinstance(data, dict) and 'retry_after' in data:
-                            # Sometimes retry_after is 0, but that's undesirable
-                            retry_after: float = data['retry_after'] or 0.25
-                            _log.debug('%s %s received a 202. Retrying in %s seconds...', method, url, retry_after)
-                            await asyncio.sleep(retry_after)
-                            continue
-
-                        # Request was successful so just return the text/json
-                        if 300 > response.status >= 200:
-                            _log.debug('%s %s has received %s.', method, url, data)
-                            return data
-
-                        # Rate limited
-                        if response.status == 429:
-                            if not response.headers.get('Via') or isinstance(data, str):
-                                # Banned by Cloudflare more than likely.
-                                raise HTTPException(response, data)
-
-                            if ratelimit.remaining > 0:
-                                # According to night
-                                # https://github.com/discord/discord-api-docs/issues/2190#issuecomment-816363129
-                                # Remaining > 0 and 429 means that a sub ratelimit was hit.
-                                # It is unclear what should happen in these cases other than just using the retry_after
-                                # value in the body.
+                    if has_ratelimit_headers:
+                        if response.status_code != 429:
+                            ratelimit.update(response, use_clock=self.use_clock)
+                            if ratelimit.remaining == 0:
                                 _log.debug(
-                                    '%s %s received a 429 despite having %s remaining requests. This is a sub-ratelimit.',
-                                    method,
-                                    url,
-                                    ratelimit.remaining,
+                                    'A rate limit bucket (%s) has been exhausted. Pre-emptively rate limiting...',
+                                    discord_hash or route_key,
                                 )
 
-                            retry_after: float = data['retry_after']
-                            if self.max_ratelimit_timeout and retry_after > self.max_ratelimit_timeout:
-                                _log.warning(
-                                    'We are being rate limited. %s %s responded with 429. Timeout of %.2f was too long, erroring instead.',
-                                    method,
-                                    url,
-                                    retry_after,
-                                )
-                                raise RateLimited(retry_after)
+                    # 202s must be retried
+                    if response.status_code == 202 and isinstance(data, dict) and 'retry_after' in data:
+                        # Sometimes retry_after is 0, but that's undesirable
+                        retry_after: float = data['retry_after'] or 0.25
+                        _log.debug('%s %s received a 202. Retrying in %s seconds...', method, url, retry_after)
+                        await asyncio.sleep(retry_after)
+                        continue
 
-                            fmt = 'We are being rate limited. %s %s responded with 429. Retrying in %.2f seconds.'
-                            _log.warning(fmt, method, url, retry_after)
+                    # Request was successful so just return the text/json
+                    if 300 > response.status_code >= 200:
+                        _log.debug('%s %s has received %s.', method, url, data)
+                        return data
 
+                    # Rate limited
+                    if response.status_code == 429:
+                        if not response.headers.get('Via') or isinstance(data, str):
+                            # Banned by Cloudflare more than likely.
+                            raise HTTPException(response, data)
+
+                        if ratelimit.remaining > 0:
+                            # According to night
+                            # https://github.com/discord/discord-api-docs/issues/2190#issuecomment-816363129
+                            # Remaining > 0 and 429 means that a sub ratelimit was hit.
+                            # It is unclear what should happen in these cases other than just using the retry_after
+                            # value in the body.
                             _log.debug(
-                                'Rate limit is being handled by bucket hash %s with %r major parameters.',
-                                bucket_hash,
-                                route.major_parameters,
+                                '%s %s received a 429 despite having %s remaining requests. This is a sub-ratelimit.',
+                                method,
+                                url,
+                                ratelimit.remaining,
                             )
 
-                            # Check if it's a global rate limit
-                            is_global = data.get('global', False)
-                            if is_global:
-                                _log.warning('Global rate limit has been hit. Retrying in %.2f seconds.', retry_after)
-                                self._global_over.clear()
+                        retry_after: float = data['retry_after']
+                        if self.max_ratelimit_timeout and retry_after > self.max_ratelimit_timeout:
+                            _log.warning(
+                                'We are being rate limited. %s %s responded with 429. Timeout of %.2f was too long, erroring instead.',
+                                method,
+                                url,
+                                retry_after,
+                            )
+                            raise RateLimited(retry_after)
 
-                            await asyncio.sleep(retry_after)
-                            _log.debug('Done sleeping for the rate limit. Retrying...')
+                        fmt = 'We are being rate limited. %s %s responded with 429. Retrying in %.2f seconds.'
+                        _log.warning(fmt, method, url, retry_after)
 
-                            # Release the global lock now that the rate limit passed
-                            if is_global:
-                                self._global_over.set()
-                                _log.debug('Global rate limit is now over.')
+                        _log.debug(
+                            'Rate limit is being handled by bucket hash %s with %r major parameters.',
+                            bucket_hash,
+                            route.major_parameters,
+                        )
 
-                            continue
+                        # Check if it's a global rate limit
+                        is_global = data.get('global', False)
+                        if is_global:
+                            _log.warning('Global rate limit has been hit. Retrying in %.2f seconds.', retry_after)
+                            self._global_over.clear()
 
-                        # Unconditional retry
-                        if response.status in {500, 502, 504, 507, 522, 523, 524}:
-                            failed += 1
-                            await asyncio.sleep(1 + tries * 2)
-                            continue
+                        await asyncio.sleep(retry_after)
+                        _log.debug('Done sleeping for the rate limit. Retrying...')
 
-                        # Usual error cases
-                        if response.status == 403:
-                            raise Forbidden(response, data)
-                        elif response.status == 404:
-                            raise NotFound(response, data)
-                        elif response.status >= 500:
-                            raise DiscordServerError(response, data)
-                        else:
-                            if isinstance(data, dict) and 'captcha_key' in data:
-                                raise CaptchaRequired(response, data)
-                            raise HTTPException(response, data)
+                        # Release the global lock now that the rate limit passed
+                        if is_global:
+                            self._global_over.set()
+                            _log.debug('Global rate limit is now over.')
+
+                        continue
+
+                    # Unconditional retry
+                    if response.status_code in {500, 502, 504, 507, 522, 523, 524}:
+                        failed += 1
+                        await asyncio.sleep(1 + tries * 2)
+                        continue
+
+                    # Usual error cases
+                    if response.status_code == 403:
+                        raise Forbidden(response, data)
+                    elif response.status_code == 404:
+                        raise NotFound(response, data)
+                    elif response.status_code >= 500:
+                        raise DiscordServerError(response, data)
+                    else:
+                        if isinstance(data, dict) and 'captcha_key' in data:
+                            raise CaptchaRequired(response, data)
+                        raise HTTPException(response, data)
 
                 # This is handling exceptions from the request
                 except OSError as e:
@@ -948,7 +964,7 @@ class HTTPClient:
 
             if response is not None:
                 # We've run out of retries, raise
-                if response.status >= 500:
+                if response.status_code >= 500:
                     raise DiscordServerError(response, data)
 
                 raise HTTPException(response, data)
@@ -956,20 +972,18 @@ class HTTPClient:
             raise RuntimeError('Unreachable code in HTTP handling')
 
     async def get_from_cdn(self, url: str) -> bytes:
-        async with self.__session.get(url) as resp:
-            if resp.status == 200:
-                return await resp.read()
-            elif resp.status == 404:
-                raise NotFound(resp, 'asset not found')
-            elif resp.status == 403:
-                raise Forbidden(resp, 'cannot retrieve asset')
-            else:
-                raise HTTPException(resp, 'failed to get asset')
-
-        raise RuntimeError('Unreachable code in HTTP handling')
+        resp = await self.__session.get(url)
+        if resp.status_code == 200:
+            return resp.content
+        elif resp.status_code == 404:
+            raise NotFound(resp, 'asset not found')
+        elif resp.status_code == 403:
+            raise Forbidden(resp, 'cannot retrieve asset')
+        else:
+            raise HTTPException(resp, 'failed to get asset')
 
     async def upload_to_cloud(self, url: str, file: Union[File, str], hash: Optional[str] = None) -> Any:
-        response: Optional[aiohttp.ClientResponse] = None
+        response: Optional[requests.Response] = None
         data: Optional[Union[Dict[str, Any], str]] = None
 
         # aiohttp helpfully sets the content type for us,
@@ -983,29 +997,29 @@ class HTTPClient:
                 file.reset(seek=tries)
 
             try:
-                async with self.__session.put(url, data=getattr(file, 'fp', file), headers=headers) as response:
-                    _log.debug('PUT %s with %s has returned %s.', url, file, response.status)
-                    data = await json_or_text(response)
+                response = await self.__session.put(url, data=getattr(file, 'fp', file), headers=headers)
+                _log.debug('PUT %s with %s has returned %s.', url, file, response.status_code)
+                data = await json_or_text(response)
 
-                    # Request was successful so just return the text/json
-                    if 300 > response.status >= 200:
-                        _log.debug('PUT %s has received %s.', url, data)
-                        return data
+                # Request was successful so just return the text/json
+                if 300 > response.status_code >= 200:
+                    _log.debug('PUT %s has received %s.', url, data)
+                    return data
 
-                    # Unconditional retry
-                    if response.status in {500, 502, 504}:
-                        await asyncio.sleep(1 + tries * 2)
-                        continue
+                # Unconditional retry
+                if response.status_code in {500, 502, 504}:
+                    await asyncio.sleep(1 + tries * 2)
+                    continue
 
-                    # Usual error cases
-                    if response.status == 403:
-                        raise Forbidden(response, data)
-                    elif response.status == 404:
-                        raise NotFound(response, data)
-                    elif response.status >= 500:
-                        raise DiscordServerError(response, data)
-                    else:
-                        raise HTTPException(response, data)
+                # Usual error cases
+                if response.status_code == 403:
+                    raise Forbidden(response, data)
+                elif response.status_code == 404:
+                    raise NotFound(response, data)
+                elif response.status_code >= 500:
+                    raise DiscordServerError(response, data)
+                else:
+                    raise HTTPException(response, data)
             except OSError as e:
                 # Connection reset by peer
                 if tries < 4 and e.errno in (54, 10054):
@@ -1015,7 +1029,7 @@ class HTTPClient:
 
         if response is not None:
             # We've run out of retries, raise
-            if response.status >= 500:
+            if response.status_code >= 500:
                 raise DiscordServerError(response, data)
 
             raise HTTPException(response, data)
@@ -1023,8 +1037,10 @@ class HTTPClient:
     # State management
 
     async def close(self) -> None:
+        if self.__asession:
+            await self.__asession.close()
         if self.__session:
-            await self.__session.close()
+            self.__session.close()
 
     # Login management
 
@@ -4665,15 +4681,15 @@ class HTTPClient:
         return self.request(Route('POST', '/tutorial/indicators/suppress'))
 
     async def get_preferred_voice_regions(self) -> List[dict]:
-        async with self.__session.get('https://latency.discord.media/rtc') as resp:
-            if resp.status == 200:
-                return await resp.json()
-            elif resp.status == 404:
-                raise NotFound(resp, 'rtc regions not found')
-            elif resp.status == 403:
-                raise Forbidden(resp, 'cannot retrieve rtc regions')
-            else:
-                raise HTTPException(resp, 'failed to get rtc regions')
+        response = await self.__session.get('https://latency.discord.media/rtc')
+        if response.status_code == 200:
+            return await response.json()
+        elif response.status_code == 404:
+            raise NotFound(response, 'rtc regions not found')
+        elif response.status_code == 403:
+            raise Forbidden(response, 'cannot retrieve rtc regions')
+        else:
+            raise HTTPException(response, 'failed to get rtc regions')
 
     # Experiments
 
