@@ -153,7 +153,7 @@ CIPHERS = (
 _log = logging.getLogger(__name__)
 
 
-async def json_or_text(response: aiohttp.ClientResponse | requests.Response) -> Union[Dict[str, Any], str]:
+async def json_or_text(response: Union[aiohttp.ClientResponse, requests.Response]) -> Union[Dict[str, Any], str]:
     if isinstance(response, aiohttp.ClientResponse):
         text = await response.text(encoding='utf-8')
     else:
@@ -448,7 +448,7 @@ class Ratelimit:
         self.reset_after = 0.0
         self.dirty = False
 
-    def update(self, response: aiohttp.ClientResponse | requests.Response, *, use_clock: bool = False) -> None:
+    def update(self, response: Union[aiohttp.ClientResponse, requests.Response], *, use_clock: bool = False) -> None:
         headers = response.headers
         self.limit = int(headers.get('X-Ratelimit-Limit', 1))
 
