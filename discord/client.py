@@ -215,12 +215,6 @@ class Client:
         The default behavior is ``True`` (what the client does).
 
         .. versionadded:: 2.0
-    http_trace: :class:`aiohttp.TraceConfig`
-        The trace configuration to use for tracking HTTP requests the library does using ``aiohttp``.
-        This allows you to check requests the library is using. For more information, check the
-        `aiohttp documentation <https://docs.aiohttp.org/en/stable/client_advanced.html#client-tracing>`_.
-
-        .. versionadded:: 2.0
     captcha_handler: Optional[:class:`CaptchaHandler`]
         A class that solves captcha challenges.
 
@@ -249,7 +243,6 @@ class Client:
         proxy: Optional[str] = options.pop('proxy', None)
         proxy_auth: Optional[aiohttp.BasicAuth] = options.pop('proxy_auth', None)
         unsync_clock: bool = options.pop('assume_unsync_clock', True)
-        http_trace: Optional[aiohttp.TraceConfig] = options.pop('http_trace', None)
         captcha_handler: Optional[CaptchaHandler] = options.pop('captcha_handler', None)
         if captcha_handler is not None and not isinstance(captcha_handler, CaptchaHandler):
             raise TypeError(f'captcha_handler must derive from CaptchaHandler')
@@ -259,7 +252,6 @@ class Client:
             proxy=proxy,
             proxy_auth=proxy_auth,
             unsync_clock=unsync_clock,
-            http_trace=http_trace,
             captcha_handler=captcha_handler,
             max_ratelimit_timeout=max_ratelimit_timeout,
             locale=lambda: self._connection.locale,

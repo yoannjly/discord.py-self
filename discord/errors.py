@@ -105,10 +105,10 @@ class HTTPException(DiscordException):
 
     Attributes
     ------------
-    response: :class:`aiohttp.ClientResponse`
-        The response of the failed HTTP request. This is an
-        instance of :class:`aiohttp.ClientResponse`. In some cases
-        this could also be a :class:`requests.Response`.
+    response: Union[:class:`curl_cffi.requests.Response`, :class:`aiohttp.ClientResponse`]
+        The response of the failed HTTP request. This is an instance of
+        :class:`curl_cffi.requests.Response` or :class:`aiohttp.ClientResponse`.
+        In some cases this could also be a :class:`requests.Response`.
     text: :class:`str`
         The text of the error. Could be an empty string.
     status: :class:`int`
