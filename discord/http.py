@@ -1439,25 +1439,6 @@ class HTTPClient:
         r = Route('DELETE', '/guilds/{guild_id}/bans/{user_id}', guild_id=guild_id, user_id=user_id)
         return self.request(r, reason=reason)
 
-    def guild_voice_state(
-        self,
-        user_id: Snowflake,
-        guild_id: Snowflake,
-        *,
-        mute: Optional[bool] = None,
-        deafen: Optional[bool] = None,
-        reason: Optional[str] = None,
-    ) -> Response[member.Member]:
-        r = Route('PATCH', '/guilds/{guild_id}/members/{user_id}', guild_id=guild_id, user_id=user_id)
-        payload = {}
-        if mute is not None:
-            payload['mute'] = mute
-
-        if deafen is not None:
-            payload['deaf'] = deafen
-
-        return self.request(r, json=payload, reason=reason)
-
     def edit_my_voice_state(self, guild_id: Snowflake, payload: Dict[str, Any]) -> Response[None]:  # TODO: remove payload
         r = Route('PATCH', '/guilds/{guild_id}/voice-states/@me', guild_id=guild_id)
         return self.request(r, json=payload)
