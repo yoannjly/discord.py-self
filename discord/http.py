@@ -167,7 +167,7 @@ except Exception:
 
 # Required for curl_cffi to work unfortunately
 if platform.system() == 'Windows' and sys.version_info >= (3, 8):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # type: ignore # Does not exist on non-Windows platforms
 
 
 async def json_or_text(response: Union[aiohttp.ClientResponse, requests.Response]) -> Union[Dict[str, Any], str]:
