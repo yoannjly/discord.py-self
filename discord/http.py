@@ -32,6 +32,7 @@ import ssl
 import string
 import sys
 from collections import deque
+from http import HTTPStatus
 from random import choice, choices
 from typing import (
     TYPE_CHECKING,
@@ -53,9 +54,6 @@ from typing import (
     overload,
 )
 from urllib.parse import quote as _uriquote
-
-if platform.system() == 'Windows' and sys.version_info >= (3, 8):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())  # type: ignore
 
 import aiohttp
 from curl_cffi import requests
@@ -153,6 +151,25 @@ CIPHERS = (
 _log = logging.getLogger(__name__)
 
 
+def _gen_accept_encoding_header():
+    return 'gzip, deflate, br' if aiohttp.http_parser.HAS_BROTLI else 'gzip, deflate'  # type: ignore
+
+
+# For some reason, the Discord voice websocket expects this header to be
+# completely lowercase while aiohttp respects spec and does it as case-insensitive
+aiohttp.hdrs.WEBSOCKET = 'websocket'  # type: ignore
+try:
+    # Support brotli if installed
+    aiohttp.client_reqrep.ClientRequest.DEFAULT_HEADERS[aiohttp.hdrs.ACCEPT_ENCODING] = _gen_accept_encoding_header()  # type: ignore
+except Exception:
+    # aiohttp does it for us on newer versions anyway
+    pass
+
+# Required for curl_cffi to work unfortunately
+if platform.system() == 'Windows' and sys.version_info >= (3, 8):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+
 async def json_or_text(response: Union[aiohttp.ClientResponse, requests.Response]) -> Union[Dict[str, Any], str]:
     if isinstance(response, aiohttp.ClientResponse):
         text = await response.text(encoding='utf-8')
@@ -190,9 +207,7 @@ async def _gen_session(session: Optional[aiohttp.ClientSession]) -> aiohttp.Clie
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.maximum_version = ssl.TLSVersion.TLSv1_3
     ctx.set_ciphers(':'.join(CIPHERS))
-    ctx.options |= ssl.OP_NO_SSLv2
-    ctx.options |= ssl.OP_NO_SSLv3
-    ctx.options |= ssl.OP_NO_COMPRESSION
+    ctx.options |= ssl.OP_NO_SSLv2 | ssl.OP_NO_SSLv3
     ctx.set_ecdh_curve('prime256v1')
 
     if connector is not None:
@@ -354,10 +369,6 @@ def handle_message_parameters(
             )
 
     return MultipartParameters(payload=payload, multipart=multipart, files=to_upload)
-
-
-def _gen_accept_encoding_header():
-    return 'gzip, deflate, br' if aiohttp.http_parser.HAS_BROTLI else 'gzip, deflate'  # type: ignore
 
 
 class Route:
@@ -553,17 +564,6 @@ class Ratelimit:
                 self._wake(tokens, exception=exception)
 
 
-# For some reason, the Discord voice websocket expects this header to be
-# completely lowercase while aiohttp respects spec and does it as case-insensitive
-aiohttp.hdrs.WEBSOCKET = 'websocket'  # type: ignore
-try:
-    # Support brotli if installed
-    aiohttp.client_reqrep.ClientRequest.DEFAULT_HEADERS[aiohttp.hdrs.ACCEPT_ENCODING] = _gen_accept_encoding_header()  # type: ignore
-except Exception:
-    # aiohttp does it for us on newer versions anyway
-    pass
-
-
 class _FakeResponse:
     def __init__(self, reason: str, status: int) -> None:
         self.reason = reason
@@ -581,7 +581,6 @@ class HTTPClient:
         proxy: Optional[str] = None,
         proxy_auth: Optional[aiohttp.BasicAuth] = None,
         unsync_clock: bool = True,
-        http_trace: Optional[aiohttp.TraceConfig] = None,
         captcha_handler: Optional[CaptchaHandler] = None,
         max_ratelimit_timeout: Optional[float] = None,
         locale: Callable[[], str] = lambda: 'en-US',
@@ -604,7 +603,6 @@ class HTTPClient:
         self.ack_token: Optional[str] = None
         self.proxy: Optional[str] = proxy
         self.proxy_auth: Optional[aiohttp.BasicAuth] = proxy_auth
-        self.http_trace: Optional[aiohttp.TraceConfig] = http_trace
         self.use_clock: bool = not unsync_clock
         self.captcha_handler: Optional[CaptchaHandler] = captcha_handler
         self.max_ratelimit_timeout: Optional[float] = max(30.0, max_ratelimit_timeout) if max_ratelimit_timeout else None
@@ -616,10 +614,10 @@ class HTTPClient:
 
     def __del__(self) -> None:
         asession = self.__asession
-        if asession:
+        if asession and asession.connector:
             try:
-                asession.connector._close()  # type: ignore # Handled below
-            except AttributeError:
+                asession.connector._close()
+            except Exception:
                 pass
 
     def clear(self) -> None:
@@ -635,17 +633,14 @@ class HTTPClient:
 
         if self.connector is MISSING or self.connector.closed:
             self.connector = aiohttp.TCPConnector(limit=0)
-        self.__asession = session = await _gen_session(
-            aiohttp.ClientSession(
-                connector=self.connector, trace_configs=None if self.http_trace is None else [self.http_trace]
-            )
-        )
+        self.__asession = session = await _gen_session(aiohttp.ClientSession(connector=self.connector))
         self.super_properties, self.encoded_super_properties = sp, _ = await utils._get_info(session)
         _log.info('Found user agent %s, build number %s.', sp.get('browser_user_agent'), sp.get('client_build_number'))
 
-        impersonate = f'chrome{sp.get("browser_user_agent", "110")[:3]}'
+        impersonate = f'chrome{self.browser_version[:3]}'
         if not requests.BrowserType.has(impersonate):
-            impersonate = 'chrome110'
+            chromes = [b.value for b in requests.BrowserType if b.value.startswith('chrome')]
+            impersonate = max(chromes, key=lambda c: int(c[6:].split('_')[0]))
         self.__session = requests.AsyncSession(impersonate=impersonate)
 
         if self.captcha_handler is not None:
@@ -661,9 +656,8 @@ class HTTPClient:
             'timeout': 30.0,
             'autoclose': False,
             'headers': {
-                'Accept-Language': 'en-US',
+                'Accept-Language': 'en-US,en;q=0.9',
                 'Cache-Control': 'no-cache',
-                'Connection': 'Upgrade',
                 'Origin': 'https://discord.com',
                 'Pragma': 'no-cache',
                 'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
@@ -676,7 +670,7 @@ class HTTPClient:
 
     @property
     def browser_version(self) -> str:
-        return self.super_properties['browser_version']
+        return self.super_properties.get('browser_version', '')
 
     @property
     def user_agent(self) -> str:
@@ -726,9 +720,8 @@ class HTTPClient:
 
         # Header creation
         headers = {
-            'Accept-Language': 'en-US',
+            'Accept-Language': 'en-US,en;q=0.9',
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
             'Origin': 'https://discord.com',
             'Pragma': 'no-cache',
             'Referer': 'https://discord.com/channels/@me',
@@ -778,13 +771,16 @@ class HTTPClient:
         if kwargs.pop('super_properties_to_track', False):
             headers['X-Track'] = headers.pop('X-Super-Properties')
 
+        extra_headers = kwargs.pop('headers', None)
+        if extra_headers:
+            headers.update(extra_headers)
         kwargs['headers'] = headers
 
         # Proxy support
         if self.proxy is not None:
             kwargs['proxies'] = {'http': self.proxy, 'https': self.proxy}
-        # if self.proxy_auth is not None:
-        #     kwargs['proxy_auth'] = self.proxy_auth
+        if self.proxy_auth is not None:
+            headers['Proxy-Authorization'] = self.proxy_auth.encode()
 
         if not self._global_over.is_set():
             await self._global_over.wait()
@@ -810,7 +806,8 @@ class HTTPClient:
 
                 try:
                     response = await self.__session.request(method, url, **kwargs)
-                    response.status: int = response.status_code  # type: ignore
+                    response.status = response.status_code  # type: ignore
+                    response.reason = HTTPStatus(response.status_code).phrase
                     _log.debug('%s %s with %s has returned %s.', method, url, kwargs.get('data'), response.status_code)
                     data = await json_or_text(response)
 
@@ -923,7 +920,7 @@ class HTTPClient:
                         continue
 
                     # Unconditional retry
-                    if response.status_code in {500, 502, 504, 507, 522, 523, 524}:
+                    if response.status_code in {502, 504, 507, 522, 523, 524}:
                         failed += 1
                         await asyncio.sleep(1 + tries * 2)
                         continue
@@ -972,18 +969,18 @@ class HTTPClient:
             raise RuntimeError('Unreachable code in HTTP handling')
 
     async def get_from_cdn(self, url: str) -> bytes:
-        resp = await self.__session.get(url)
-        if resp.status_code == 200:
-            return resp.content
-        elif resp.status_code == 404:
-            raise NotFound(resp, 'asset not found')
-        elif resp.status_code == 403:
-            raise Forbidden(resp, 'cannot retrieve asset')
-        else:
-            raise HTTPException(resp, 'failed to get asset')
+        async with self.__asession.get(url) as resp:
+            if resp.status == 200:
+                return await resp.read()
+            elif resp.status == 404:
+                raise NotFound(resp, 'asset not found')
+            elif resp.status == 403:
+                raise Forbidden(resp, 'cannot retrieve asset')
+            else:
+                raise HTTPException(resp, 'failed to get asset')
 
     async def upload_to_cloud(self, url: str, file: Union[File, str], hash: Optional[str] = None) -> Any:
-        response: Optional[requests.Response] = None
+        response: Optional[aiohttp.ClientResponse] = None
         data: Optional[Union[Dict[str, Any], str]] = None
 
         # aiohttp helpfully sets the content type for us,
@@ -997,29 +994,29 @@ class HTTPClient:
                 file.reset(seek=tries)
 
             try:
-                response = await self.__session.put(url, data=getattr(file, 'fp', file), headers=headers)
-                _log.debug('PUT %s with %s has returned %s.', url, file, response.status_code)
-                data = await json_or_text(response)
+                async with self.__asession.put(url, data=getattr(file, 'fp', file), headers=headers) as response:
+                    _log.debug('PUT %s with %s has returned %s.', url, file, response.status)
+                    data = await json_or_text(response)
 
-                # Request was successful so just return the text/json
-                if 300 > response.status_code >= 200:
-                    _log.debug('PUT %s has received %s.', url, data)
-                    return data
+                    # Request was successful so just return the text/json
+                    if 300 > response.status >= 200:
+                        _log.debug('PUT %s has received %s.', url, data)
+                        return data
 
-                # Unconditional retry
-                if response.status_code in {500, 502, 504}:
-                    await asyncio.sleep(1 + tries * 2)
-                    continue
+                    # Unconditional retry
+                    if response.status in {500, 502, 504}:
+                        await asyncio.sleep(1 + tries * 2)
+                        continue
 
-                # Usual error cases
-                if response.status_code == 403:
-                    raise Forbidden(response, data)
-                elif response.status_code == 404:
-                    raise NotFound(response, data)
-                elif response.status_code >= 500:
-                    raise DiscordServerError(response, data)
-                else:
-                    raise HTTPException(response, data)
+                    # Usual error cases
+                    if response.status == 403:
+                        raise Forbidden(response, data)
+                    elif response.status == 404:
+                        raise NotFound(response, data)
+                    elif response.status >= 500:
+                        raise DiscordServerError(response, data)
+                    else:
+                        raise HTTPException(response, data)
             except OSError as e:
                 # Connection reset by peer
                 if tries < 4 and e.errno in (54, 10054):
@@ -1029,7 +1026,7 @@ class HTTPClient:
 
         if response is not None:
             # We've run out of retries, raise
-            if response.status_code >= 500:
+            if response.status >= 500:
                 raise DiscordServerError(response, data)
 
             raise HTTPException(response, data)
