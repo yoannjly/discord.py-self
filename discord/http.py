@@ -946,6 +946,17 @@ class HTTPClient:
                         continue
                     raise
 
+                # libcurl errors
+                except requests.RequestsError as e:
+                    if not getattr(e, 'code', None):
+                        # Outdated library or not an HTTP exception
+                        raise
+                    if e.code in (23, 28, 35):  # type: ignore
+                        failed += 1
+                        await asyncio.sleep(1 + tries * 2)
+                        continue
+                    raise
+
                 # Captcha handling
                 except CaptchaRequired as e:
                     # The way captcha handling works is completely transparent
