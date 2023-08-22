@@ -708,6 +708,14 @@ class ApplicationBot(User):
         return self.application.require_code_grant
 
     @property
+    def disabled(self) -> bool:
+        """:class:`bool`: Whether the bot is disabled by Discord.
+
+        .. versionadded:: 2.1
+        """
+        return self.application.disabled
+
+    @property
     def bio(self) -> Optional[str]:
         """Optional[:class:`str`]: Returns the bot's 'about me' section."""
         return self.application.description or None
@@ -2271,7 +2279,7 @@ class Application(PartialApplication):
     bot: Optional[:class:`ApplicationBot`]
         The bot attached to the application, if any.
     disabled: :class:`bool`
-        Whether the bot attached to this application is disabled.
+        Whether the bot attached to this application is disabled by Discord.
 
         .. versionadded:: 2.1
     interactions_endpoint_url: Optional[:class:`str`]
