@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import types
 from collections import namedtuple
-from typing import Any, ClassVar, Dict, List, Optional, TYPE_CHECKING, Tuple, Type, TypeVar, Iterator, Mapping
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterator, List, Mapping, Optional, Tuple, Type, TypeVar
 
 __all__ = (
     'Enum',
@@ -117,6 +117,9 @@ __all__ = (
     'ForumLayoutType',
     'ForumOrderType',
     'ReadStateType',
+    'DirectoryEntryType',
+    'DirectoryCategory',
+    'HubType',
 )
 
 if TYPE_CHECKING:
@@ -251,6 +254,7 @@ class ChannelType(Enum):
     public_thread = 11
     private_thread = 12
     stage_voice = 13
+    directory = 14
     forum = 15
 
     def __str__(self) -> str:
@@ -909,6 +913,9 @@ class PrivacyLevel(Enum):
     closed = 2
     guild_only = 2
 
+    def __int__(self) -> int:
+        return self.value
+
 
 class ScheduledEventEntityType(Enum):
     stage_instance = 1
@@ -1542,6 +1549,32 @@ class ReadStateType(Enum):
     notification_center = 2
     guild_home = 3
     onboarding = 4
+
+
+class DirectoryEntryType(Enum):
+    guild = 0
+    scheduled_event = 1
+
+    def __int__(self) -> int:
+        return self.value
+
+
+class DirectoryCategory(Enum):
+    uncategorized = 0
+    school_club = 1
+    class_subject = 2
+    study_social = 3
+    miscellaneous = 5
+
+    def __int__(self) -> int:
+        return self.value
+
+
+class HubType(Enum):
+    default = 0
+    high_school = 1
+    college = 2
+    university = 2
 
 
 def create_unknown_value(cls: Type[E], val: Any) -> E:
