@@ -4186,7 +4186,7 @@ class GroupChannel(selfcord.abc.Messageable, selfcord.abc.Connectable, selfcord.
             An argument list of users to add to this group.
             If the user is of type :class:`Object`, then the ``nick`` attribute
             is used as the nickname for the added recipient.
-        nicks: Optional[Dict[:class:`~selfcord.abc.Snowflake`, :class:`str`]]
+        nicks: Optional[Mapping[:class:`~selfcord.abc.Snowflake`, :class:`str`]]
             A mapping of user IDs to nicknames to use for the added recipients.
 
             .. versionadded:: 2.0
