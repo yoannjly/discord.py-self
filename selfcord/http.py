@@ -2443,7 +2443,7 @@ class HTTPClient:
         with_counts: bool = True,
         guild_scheduled_event_id: Optional[Snowflake] = None,
         input_value: Optional[str] = None,
-    ) -> Response[invite.Invite]:
+    ) -> Response[Union[invite.PartialInvite, invite.InviteWithCounts]]:
         params: Dict[str, Any] = {
             'with_counts': str(with_counts).lower(),
             'with_expiration': 'true',  # No longer exists
