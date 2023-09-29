@@ -3665,7 +3665,7 @@ class DMChannel(selfcord.abc.Messageable, selfcord.abc.Connectable, selfcord.abc
 
         .. versionadded:: 2.0
         """
-        return self._message_request if self._message_request is not None else True
+        return not self._message_request if self._message_request is not None else True
 
     def is_spam(self) -> bool:
         """:class:`bool`: Indicates if the direct message is a spam message request.
