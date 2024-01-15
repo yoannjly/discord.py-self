@@ -516,6 +516,7 @@ class Context(selfcord.abc.Messageable, Generic[BotT]):
     async def reply(self, content: Optional[str] = None, **kwargs: Any) -> Message:
         return await self.message.reply(content, **kwargs)
 
+    @selfcord.utils.deprecated("Context.application_commands")
     @selfcord.utils.copy_doc(Message.message_commands)
     def message_commands(
         self,
