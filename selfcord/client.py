@@ -295,7 +295,9 @@ class Client:
         self.captcha_handler: Optional[Callable[[CaptchaRequired, Client], Awaitable[str]]] = options.pop(
             'captcha_handler', None
         )
+        connector: Optional[aiohttp.BaseConnector] = options.pop('connector', None)
         self.http: HTTPClient = HTTPClient(
+            connector=connector,
             proxy=proxy,
             proxy_auth=proxy_auth,
             unsync_clock=unsync_clock,
