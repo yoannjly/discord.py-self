@@ -282,7 +282,7 @@ class Client:
     """
 
     def __init__(self, **options: Any) -> None:
-        self.loop: asyncio.AbstractEventLoop = _loop
+        self.loop: asyncio.AbstractEventLoop = options.pop('loop', _loop)
         # self.ws is set in the connect method
         self.ws: DiscordWebSocket = None  # type: ignore
         self._listeners: Dict[str, List[Tuple[asyncio.Future, Callable[..., bool]]]] = {}
@@ -295,7 +295,9 @@ class Client:
         self.captcha_handler: Optional[Callable[[CaptchaRequired, Client], Awaitable[str]]] = options.pop(
             'captcha_handler', None
         )
+        connector: Optional[aiohttp.BaseConnector] = options.pop('connector', None)
         self.http: HTTPClient = HTTPClient(
+            connector=connector,
             proxy=proxy,
             proxy_auth=proxy_auth,
             unsync_clock=unsync_clock,
