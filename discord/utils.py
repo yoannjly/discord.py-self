@@ -1453,18 +1453,18 @@ _BUILD_NUMBER_REGEX = re.compile(r'build_number:"(\d+)"')
 
 
 async def _get_info(session: ClientSession) -> Tuple[Dict[str, Any], str]:
-    try:
-        async with session.post('https://cordapi.dolfi.es/api/v2/properties/web', timeout=5) as resp:
-            json = await resp.json()
-            return json['properties'], json['encoded']
-    except Exception:
-        _log.info('Info API temporarily down. Falling back to manual retrieval...')
-
-    try:
-        bn = await _get_build_number(session)
-    except Exception:
-        _log.critical('Could not retrieve client build number. Falling back to hardcoded value...')
-        bn = FALLBACK_BUILD_NUMBER
+    # try:
+    #     async with session.post('https://cordapi.dolfi.es/api/v2/properties/web', timeout=5) as resp:
+    #         json = await resp.json()
+    #         return json['properties'], json['encoded']
+    # except Exception:
+    #     _log.info('Info API temporarily down. Falling back to manual retrieval...')
+    #
+    # try:
+    #     bn = await _get_build_number(session)
+    # except Exception:
+    #     _log.critical('Could not retrieve client build number. Falling back to hardcoded value...')
+    bn = FALLBACK_BUILD_NUMBER
 
     try:
         bv = await _get_browser_version(session)
